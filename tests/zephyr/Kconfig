@@ -1,0 +1,21 @@
+# Copyright (c) 2022 Laczen
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+mainmenu "SBootKit configuration"
+
+menu "SBootKit settings"
+
+config SBK
+	bool "Enable sBootKit"
+	
+config SBK_TINYCRYPT
+        bool "Enable tinycrypt"
+
+config SBK_TLV_MANIFEST
+        bool "Enable support for TLV manifest"
+
+endmenu
+
+source "Kconfig.zephyr"

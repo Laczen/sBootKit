@@ -1,3 +1,6 @@
 [submodule "ext/tinycrypt"]
 	path = ext/tinycrypt
 	url = https://github.com/intel/tinycrypt.git
+[submodule "ext/kvs"]
+	path = ext/kvs
+	url = https://github.com/Laczen/kvs.git

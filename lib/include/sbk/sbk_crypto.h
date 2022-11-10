@@ -8,6 +8,11 @@
 
 #include <stdint.h>
 
+struct sbk_crypto_se {
+        void *ctx;
+        void *data;
+};
+
 #ifdef CONFIG_SBK_TINYCRYPT
 #include "tinycrypt/ecc.h"
 #include "tinycrypt/aes.h"
@@ -15,14 +20,22 @@
 #include "tinycrypt/ecc_dsa.h"
 #include "tinycrypt/sha256.h"
 #include "tinycrypt/aes.h"
-#define AES_BLOCK_SIZE		TC_AES_BLOCK_SIZE
-#define AES_KEY_SIZE		TC_AES_KEY_SIZE
-#define SIGNATURE_BYTES		2 * NUM_ECC_BYTES
-#define PUBLIC_KEY_BYTES	2 * NUM_ECC_BYTES
-#define PRIVATE_KEY_BYTES	NUM_ECC_BYTES
-#define SHARED_SECRET_BYTES	NUM_ECC_BYTES
-#define VERIFY_BYTES		NUM_ECC_BYTES
-#define DIGEST_BYTES		NUM_ECC_BYTES
+
+#define SBK_CRYPTO_FW_SEAL_PUBKEY_SIZE 2 * NUM_ECC_BYTES
+#define SBK_CRYPTO_FW_SEAL_SIGNATURE_SIZE 2 * NUM_ECC_BYTES
+#define SBK_CRYPTO_FW_SEAL_MESSAGE_SIZE NUM_ECC_BYTES
+#define SBK_CRYPTO_FW_SEAL_SIZE SBK_CRYPTO_FW_SEAL_PUBKEY_SIZE +               \
+                                SBK_CRYPTO_FW_SEAL_SIGNATURE_SIZE +            \
+                                SBK_CRYPTO_FW_SEAL_MESSAGE_SIZE
+#define SBK_CRYPTO_FW_HASH_SIZE NUM_ECC_BYTES
+#define SBK_CRYPTO_FW_ENC_PUBKEY_SIZE 2 * NUM_ECC_BYTES
+#define SBK_CRYPTO_FW_ENC_PRIVKEY_SIZE NUM_ECC_BYTES
+#define SBK_CRYPTO_FW_AESCTR_KEY_SIZE TC_AES_KEY_SIZE
+#define SBK_CRYPTO_FW_AESCTR_CTR_SIZE TC_AES_KEY_SIZE
+#define SBK_CRYPTO_FW_AESCTR_PAR_SIZE SBK_CRYPTO_FW_AESCTR_KEY_SIZE +          \
+                                      SBK_CRYPTO_FW_AESCTR_CTR_SIZE
+#define SBK_CRYPTO_FW_AESCTR_BLOCK_SIZE TC_AES_BLOCK_SIZE
+
 #endif /* CONFIG_SBK_TINYCRYPT */
 
 #ifdef __cplusplus
@@ -34,78 +47,73 @@ extern "C" {
  */
 
 /**
- * @brief sbk_get_encr_key
+ * @brief sbk_crypto_get_encr_param
  *
- * Get the key and nonce used for encryption using a ec_dh 256 key exchange.
- * The key and nonce are derived from the shared secret using a key derivation
- * function (i.e. KDF1).
- * This routine uses the bootloader private key.
+ * Get the parameter used for encryption.
  *
- * @param key: returned encryption key
- * @param nonce: returned nonce
- * @param pubkey: public key used to generate the shared secret
- * @param keysize: expected size of returned key and nonce (i.e AES block size)
+ * @param out_se: returned key and nonce as secure element
+ * @param pub_se: public key structure used to generate the shared secret as
+ *                secure element
+ * @param priv_se: private key used to generate the shared secret as secure
+ *                 element
  * @retval -ERRNO errno code if error
  * @retval 0 if succesfull
  */
-int sbk_get_encr_key(uint8_t *key, uint8_t *nonce, const uint8_t *pubkey,
-                     uint32_t keysize);
+int sbk_crypto_get_encr_param(struct sbk_crypto_se *out_se,
+                              const struct sbk_crypto_se *pub_se,
+                              const struct sbk_crypto_se *priv_se);
 
 /**
- * @brief sbk_sign_verify
+ * @brief sbk_crypto_seal_verify
  *
- * Verifies the signature given the hash for a ec_dsa 256 signing.
- * This routine uses the public root keys that are stored in the bootloader.
+ * Verifies the firmware seal
  *
- * @param digest: calculated message digest
- * @param signature: message hash signature
+ * @param seal: seal data (pubkey, signature, message hash) as secure element
  * @retval -ERRNO errno code if error
  * @retval 0 if succesfull
  */
-int sbk_sign_verify(const uint8_t *digest, const uint8_t *signature);
+int sbk_crypto_seal_verify(const struct sbk_crypto_se *seal_se);
 
 /**
- * @brief sbk_digest_verify
+ * @brief sbk_crypto_msg_from_seal
  *
- * Verifies the digest.
+ * Get a pointer to the message hash from a seal
  *
- * @param digest: calculated message digest
+ * @param seal: seal data (pubkey, signature, message hash) as secure element
+ */
+uint8_t *sbk_crypto_hash_from_seal(const struct sbk_crypto_se *seal_se);
+
+/**
+ * @brief sbk_crypto_hash_verify
+ *
+ * Verifies a hash to one of multiple hashes.
+ *
+ * @param hash_se: expected message hash as secure element
  * @param read_cb: read callback function
  * @param read_cb_ctx: read callback context
  * @param len: area size
  * @retval -ERRNO errno code if error
  * @retval 0 if succesfull
  */
-int sbk_digest_verify(const uint8_t *digest, int (*read_cb)(const void *ctx,
-		      uint32_t offset, void *data, uint32_t len),
-                      const void *read_cb_ctx, uint32_t len);
+int sbk_crypto_hash_verify(const struct sbk_crypto_se *hash_se,
+                           int (*read_cb)(const void *ctx, uint32_t offset,
+                                          void *data,uint32_t len),
+                           const void *read_cb_ctx, uint32_t len);
 
 /**
- * @brief sbk_aes_ctr_mode
+ * @brief sbk_crypto_aes_ctr_mode
  *
  * perform aes ctr calculation
  *
  * @param buf pointer to buffer to encrypt / encrypted buffer
  * @param len bytes to encrypt
- * @param ctr counter (as byte array)
- * @param key encryption key
+ * @param param_se : encryption key and ctr (as secure element)
  * @retval 0 Success
  * @retval -ERRNO errno code if error
  */
-int sbk_aes_ctr_mode(uint8_t *buf, uint32_t len, uint8_t *ctr, 
-                     const uint8_t *key);
+int sbk_crypto_aes_ctr_mode(uint8_t *buf, uint32_t len,
+                            struct sbk_crypto_se *param_se);
 
-/**
- * @brief sbk_crc32
- *
- * perform crc32 calculation
- *
- * @param crc start value
- * @param data pointer to data to calculate crc32 on
- * @param len buf length
- * @retval calculated crc32
- */
-uint32_t sbk_crc32(uint32_t crc, const void *data, uint32_t len);
 /**
  * @}
  */
@@ -115,30 +123,4 @@ uint32_t sbk_crc32(uint32_t crc, const void *data, uint32_t len);
 }
 #endif
 
-/* Some default settings () */
-#ifndef AES_BLOCK_SIZE
-#define AES_BLOCK_SIZE		16
-#endif
-#ifndef AES_KEY_SIZE
-#define AES_KEY_SIZE		16
-#endif
-#ifndef SIGNATURE_BYTES
-#define SIGNATURE_BYTES		64
-#endif
-#ifndef PUBLIC_KEY_BYTES
-#define PUBLIC_KEY_BYTES	64
-#endif
-#ifndef PRIVATE_KEY_BYTES
-#define PRIVATE_KEY_BYTES	32
-#endif
-#ifndef SHARED_SECRET_BYTES
-#define SHARED_SECRET_BYTES	32
-#endif
-#ifndef VERIFY_BYTES
-#define VERIFY_BYTES		32
-#endif
-#ifndef DIGEST_BYTES
-#define DIGEST_BYTES		32
-#endif
-
-#endif
+#endif /* SBK_CRYPTO_H_ */

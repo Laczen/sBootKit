@@ -56,7 +56,7 @@ def get_password():
 @click.option('-t', '--type', metavar='type', required=True,
               type=click.Choice(keygens.keys()))
 @click.option('-k', '--key', metavar='filename', required=True)
-@click.command(help='Generate key file for use with zb8tool')
+@click.command(help='Generate key file for use with sbktool')
 def genkey(type, key, password):
     password = get_password() if password else None
     print(type)
@@ -99,8 +99,10 @@ def validate_version(ctx, param, value):
 
 def validate_dependency(ctx, param, value):
     try:
-        decode_version(value[2])
-        decode_version(value[3])
+        for entry in value:
+            decode_version(entry[1])
+            decode_version(entry[2])
+
         return value
     except ValueError as e:
         raise click.BadParameter("{}".format(e))
@@ -111,7 +113,7 @@ def validate_hdrsize(ctx, param, value):
     min_io = image.MIN_HDRSIZE
     if (value!= 0) and (value < min_io):
         raise click.BadParameter(
-            "Minimum value for -h/--hdrsize is {} or 0".format(min_io))
+            "Minimum value for -hs/--hdrsize is {} or 0".format(min_io))
     return value
 
 class BasedIntParamType(click.ParamType):
@@ -131,45 +133,46 @@ class BasedIntParamType(click.ParamType):
 @click.argument('infile')
 @click.option('-e', '--endian', type = click.Choice(['little', 'big']),
               default = 'little', help = 'Select little or big endian')
-@click.option('-h', '--hdrsize', callback = validate_hdrsize,
+@click.option('-hs', '--hdrsize', callback = validate_hdrsize,
               type = BasedIntParamType(),
               help = 'Size of the header that was prepended during image \
 generation')
 @click.option('-la','--load-address', type = BasedIntParamType(),
-              help = 'Start address of the slot the image will be uploaded to')
-@click.option('-da','--destination-address', type = BasedIntParamType(),
-              help = 'Start address of the slot the image will be run from')
-@click.option('-v', '--version', callback = validate_version,  required = True)
-@click.option('-sk','--signkey', metavar = 'filename', required = True,
+              help = 'Address where the image should be loaded to')
+@click.option('-ds','--destination-slot', required = True, type = BasedIntParamType(),
+              help = 'Destination of the slot the image will be run from')
+@click.option('-v', '--version', callback = validate_version, type = str)
+@click.option('-sk','--signkey', metavar = 'filename',
               help = 'Sign image using the provided sign key')
 @click.option('-ek','--encrkey', metavar = 'filename',
               help = 'Encrypt image using the provided encrypt key')
-@click.option('-c','--confirm', is_flag=True,
-              help = 'Confirm the image (not a test image)')
-@click.option('-dep','--dependency', type = (BasedIntParamType(), str, str),
+@click.option('-dep','--dependency', multiple=True,
+              type = (BasedIntParamType(), str, str),
               callback = validate_dependency,
-              help = 'Image dependency, image at address in version range')
+              help = 'Image dependency, image at slot in version range')
 @click.option('-tst', '--test-image',
               help = 'generate test image as c file')
 @click.command(help='''Create a image for use with sBootKit\n
                INFILE and OUTFILE are of type hex''')
-
-def create(hdrsize, load_address, destination_address, version, dependency,
-           endian, signkey, encrkey, confirm, test_image, infile, outfile):
+def create(hdrsize, load_address, destination_slot, version, dependency,
+           endian, signkey, encrkey, test_image, infile, outfile):
     signkey = load_key(signkey)
+    print("STS", dependency[0], len(dependency))
+    dependency += (destination_slot, ('0.0.0'), (version)),
+    print("STS", dependency)
     if signkey is not None:
         encrkey = load_key(encrkey) if encrkey else None
-        img = image.Image(hdrsize = hdrsize, load_address = load_address,
-                          dest_address = destination_address,
-                          version = decode_version(version), 
-                          dep_min_addr = dep_min[1],
-                          dep_min_ver = decode_version(dep_min[2]),
-                          dep_max_ver = decode_version(dep_min[3]),
-                          endian = endian,
-                          type = type, confirm = confirm)
-        img.load(infile)
-        img.create(signkey, encrkey)
-        img.save(outfile)
+        #img = image.Image(hdrsize = hdrsize, load_address = load_address,
+        #                  dest_slot = destination_slot,
+        #                  version = decode_version(version),
+        #                  dep_slot = dependency[1],
+        #                  dep_min_ver = decode_version(dependency[2]),
+        #                  dep_max_ver = decode_version(dependency[3]),
+        #                  endian = endian,
+        #                  type = type)
+        #img.load(infile)
+        #img.create(signkey, encrkey)
+        #img.save(outfile)
 
         if test_image:
             print("const unsigned char {}[{}] = {{".format(test_image, len(img.payload)),end = '')

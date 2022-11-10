@@ -9,26 +9,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include "sbk/sbk_crypto.h"
+#include <stdint.h>
 
-uint8_t test_msg[DIGEST_BYTES] = {
+uint8_t test_msg[] = {
 	0xff, 0xfe, 0xfd, 0xfc, 0xfb, 0xfa, 0xf9, 0xf8,
 	0xf7, 0xf6, 0xf5, 0xf4, 0xf3, 0xf2, 0xf1, 0xf0,
 	0xff, 0xfe, 0xfd, 0xfc, 0xfb, 0xfa, 0xf9, 0xf8,
 	0xf7, 0xf6, 0xf5, 0xf4, 0xf3, 0xf2, 0xf1, 0xf0
 };
+uint8_t test_msg_bytes = sizeof(test_msg);
 
-
-uint8_t test_msg_hash[DIGEST_BYTES] = {
+uint8_t test_msg_hash[] = {
 	87, 43, 26, 198, 187, 148, 71, 79,
 	220, 38, 223, 89, 4, 118, 115, 109,
 	231, 185, 12, 231, 123, 212, 221, 103,
 	117, 243, 241, 37, 134, 175, 136, 251
 };
+uint8_t test_msg_hash_bytes = sizeof(test_msg_hash);
 
-uint32_t test_msg_crc32 = 0x4D299FC3;
-
-uint8_t test_signature[SIGNATURE_BYTES] = {
+uint8_t test_signature[] = {
 	252, 86, 17, 53, 85, 142, 204, 211,
 	55, 184, 117, 91, 159, 134, 6, 189,
 	152, 48, 212, 168, 153, 194, 37, 69,
@@ -38,8 +37,9 @@ uint8_t test_signature[SIGNATURE_BYTES] = {
 	44, 100, 215, 166, 176, 109, 107, 238,
 	238, 129, 253, 12, 66, 182, 43, 27
 };
+uint8_t test_signature_bytes = sizeof(test_signature);
 
-uint8_t test_enc_pub_key[PUBLIC_KEY_BYTES] = {
+uint8_t test_enc_pubkey[] = {
 	162, 232, 188, 223, 146, 244, 15, 182,
 	171, 144, 101, 158, 237, 57, 205, 66,
 	164, 144, 209, 239, 44, 138, 85, 163,
@@ -49,8 +49,10 @@ uint8_t test_enc_pub_key[PUBLIC_KEY_BYTES] = {
 	54, 48, 235, 178, 121, 206, 207, 21,
 	192, 36, 184, 152, 219, 62, 106, 175
 };
+uint8_t test_enc_pubkey_bytes = sizeof(test_enc_pubkey);
 
-uint8_t test_enc_key[16] = {
+uint8_t test_enc_key[] = {
 	100, 94, 130, 145, 92, 49, 78, 162,
 	75, 150, 19, 98, 20, 112, 197, 170
 };
+uint8_t test_enc_key_bytes = sizeof(test_enc_key);

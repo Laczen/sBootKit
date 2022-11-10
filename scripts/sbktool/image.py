@@ -32,47 +32,40 @@ from cryptography.hazmat.primitives import hashes
 
 BYTE_ALIGNMENT = 8 # Output hex file is aligned to BYTE_ALIGNMENT
 MIN_HDRSIZE = 512
-HDR_MAGIC = 0x53424b48 # SBKH in hex
-HDR_SIZE = 32
-TLV_AREA_SIGNATURE_TYPE = 0
-TLV_AREA_SIGNATURE_LENGTH = 64
-TLVE_IMAGE_HASH = 0x0100
-TLVE_IMAGE_EPUBKEY = 0x0200
-TLVE_IMAGE_DEP = 0x0300
-TLVE_IMAGE_CONF = 0x0400
-
+SBK_IMAGE_META_OPENING_INFO = 0x7546,
+SBK_IMAGE_META_SIGNATURE_INFO = 0xC918,
+SBK_IMAGE_META_IMAGE_INFO = 0xC67C,
+SBK_IMAGE_META_IMAGE_DEPENDENCY_INFO = 0x2768,
+SBK_IMAGE_META_IMAGE_DEVICE_INFO = 0xBA54,
+SBK_IMAGE_META_CLOSING_INFO = 0xA8AC,
 INTEL_HEX_EXT = "hex"
-
 STRUCT_ENDIAN_DICT = {
         'little': '<',
         'big':    '>'
 }
 
 class Image():
-    def __init__(self, hdrsize = None, load_address = None, dest_address = None,
-                 version = 0, endian='little', type = 'image', confirm = False,
-                 dep_addr = None, dep_min_ver = None, dep_max_ver = None):
+    def __init__(self, hdrsize = None, load_address = None, dest_slot = None,
+                 version = 0, endian='little', type = 'image',
+                 dep_slot = None, dep_min_ver = None, dep_max_ver = None):
         self.hdrsize = hdrsize
         self.load_address = load_address
-        self.dest_address = dest_address
-        self.run_address = None
-        self.confirm = confirm
+        self.dest_slot = dest_slot
         self.version = version or versmod.decode_version("0")
         self.endian = endian
         self.payload = []
         self.size = 0
-        self.dep_addr = dep_addr or None
+        self.dep_slot = dep_slot or None
         self.dep_min_ver = dependency[2] or versmod.decode_version("0")
         self.dep_max_ver = dependency[3] or versmod.decode_version("255.255.65535")
 
     def __repr__(self):
-        return "<hdrsize={}, load_address={}, dest_address={}, run_address={}, \
+        return "<hdrsize={}, load_address={}, dest_slot={}, \
                 Image version={}, endian={}, type={} format={}, \
                 payloadlen=0x{:x}>".format(
                     self.hdrsize,
                     self.load_address,
-                    self.dest_address,
-                    self.run_address,
+                    self.dest_slot,
                     self.version,
                     self.endian,
                     self.type,
@@ -100,11 +93,11 @@ class Image():
         else:
             self.run_address = ih.minaddr() + self.hdrsize
 
-        if self.dest_address == None:
-            self.dest_address = ih.minaddr();
+        if self.dest_slot == None:
+            self.dest_slot = 0;
 
         if self.load_address == None:
-            self.load_address = ih.minaddr();
+            self.load_address = 0;
 
         self.size = len(self.payload) - self.hdrsize;
 
@@ -135,9 +128,9 @@ class Image():
         sha = hashlib.sha256()
         sha.update(self.payload[self.hdrsize:])
         hash = sha.digest()
+        epubk = bytearray(len(signkey.get_public_key_bytearray()))
+        ehash = hash
 
-        # Encrypt the image.
-        epubk = None
         if encrkey is not None:
 
             # Generate new encryption key
@@ -164,85 +157,55 @@ class Image():
             self.payload = bytearray(self.payload)
             self.payload[self.hdrsize:] = enc
 
-        self.add_header(hash, epubk, signkey)
+            # Calculate the encrypted image hash.
+            sha = hashlib.sha256()
+            sha.update(self.payload[self.hdrsize:])
+            ehash = sha.digest()
 
-    def add_header(self, hash, epubk, signkey):
+        self.add_header(hash, epubk, ehash, signkey)
+
+    def add_header(self, hash, epubk, ehash, signkey):
         """Install the image header."""
-        # Image info TLV
+        # info_hdr struct
         e = STRUCT_ENDIAN_DICT[self.endian]
-        fmt = (e +
-            # type struct zb_fsl_hdr {
-            'I' +   # Magic
-            'I' +   # Slot Address uint32
-            'HBB' + # HDR info - Size, sigtype, siglen
-            'I' +   # Size (excluding header)
-            'I' +   # Image Address
-            'BBHI' +  # Vers ImageVersion
-            'I'     # Pad
-            ) # }
-        hdr = struct.pack(fmt,
-                HDR_MAGIC,
-                self.load_address,
-                self.hdrsize,
-                TLV_AREA_SIGNATURE_TYPE,
-                TLV_AREA_SIGNATURE_LENGTH,
-                self.size,
-                self.run_address,
-                self.version.major,
-                self.version.minor or 0,
-                self.version.revision or 0,
-                self.version.build or 0,
-                0xffffffff
-                )
+        info_hdr_fmt = (e +
+            # struct info_hdr
+            'H' + #uint16_t tag;
+            'H' #uint16_t payloadsize;
+        )
 
-        hdr += struct.pack('H', TLVE_IMAGE_HASH)
-        hdr += struct.pack('H', len(hash))
-        hdr += hash
+        # start from the back and keep adding items to the front;
+        info_hdr = struct.pack(info_hdr_fmt, SBK_IMAGE_META_CLOSING_INFO, 0);
+        hdr = info_hdr;
 
-        if epubk is not None:
-            hdr += struct.pack('H', TLVE_IMAGE_EPUBKEY)
-            hdr += struct.pack('H', len(epubk))
-            hdr += epubk
-
-        e = STRUCT_ENDIAN_DICT[self.endian]
-        fmt = (e +
-            # type struct zb_img_dep {
-            'I' +   # Image offset
+        dep_fmt = (e +
+            # dependency info {
+            'I' +   # Image slot
             'BBH' + # Image dep min
             'BBH'   # Image dep max
             ) #}
-        dep = struct.pack(fmt,
-            self.dest_address,
+        dep = struct.pack(dep_fmt,
+            self.dest_slot,
             0,0,0,
             self.version.major or 0,
             self.version.minor or 0,
             self.version.revision or 0
             )
+        info_hdr = struct.pack(info_hdr_fmt,
+            SBK_IMAGE_META_IMAGE_DEPENDENCY_INFO,
+            len(dep));
+        hdr = info_hdr + dep + hdr;
 
-        hdr += struct.pack('H', TLVE_IMAGE_DEP)
-        hdr += struct.pack('H', len(dep))
-        hdr += dep
-
-        if self.confirm:
-            hdr += struct.pack('H', TLVE_IMAGE_CONF)
-            hdr += struct.pack('H', 0)
-
-        # close the tlv area with a zero byte
-        hdr += struct.pack('H', 0)
-
-        hdr_len = self.hdrsize - TLV_AREA_SIGNATURE_LENGTH
-        if (len(hdr) > hdr_len):
-            raise Exception("Header size to small to fit manifest info")
-
-        # TLVA padding
-        while len(hdr) < hdr_len:
-            hdr += struct.pack('B', 0xff)
+        filler = bytearray(self.hdr_size - len(hdr) - 4);
+        info_hdr = struct.pack(info_hdr_fmt,
+            SBK_IMAGE_META_OPENING_INFO,
+            len(filler));
+        hdr = filler + info_hdr + hdr;
 
         sha = hashlib.sha256()
         sha.update(hdr)
         hdr_hash = sha.digest()
         hdr_signature = signkey.sign_prehashed(hdr_hash)
-        hdr += hdr_signature
 
         self.payload = bytearray(self.payload)
         self.payload[0:len(hdr)] = hdr

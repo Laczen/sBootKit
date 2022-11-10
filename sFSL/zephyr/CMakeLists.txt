@@ -30,7 +30,6 @@ zephyr_include_directories(
     ${ROOT_DIR}/lib/include
 )
 zephyr_library_sources(
-    ${SBOOTKIT_DIR}/src/sbk_move.c
     ${SBOOTKIT_DIR}/src/sbk_crypto.c
     ${SBOOTKIT_DIR}/src/sbk_image.c
     ${SBOOTKIT_DIR}/src/sbk_os.c
@@ -51,10 +50,9 @@ zephyr_library_sources_ifdef(CONFIG_SBK_TINYCRYPT
 
 zephyr_library_sources(
     ./src/main.c
-    ./src/test_sbk_os.c
-    ./src/test_sbk_crypto.c
-    ./src/test_sbk_image.c
-    ./src/testvars.c
-    ./src/testkeys.c
+)
+
+zephyr_library_sources_ifdef(CONFIG_ARM
+    ./src/arm_jump.c
 )
 endif()

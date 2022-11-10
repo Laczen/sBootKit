@@ -6,11 +6,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <ztest.h>
+#include <zephyr/ztest.h>
 #include "sbk/sbk_crypto.h"
-
-extern uint8_t test_msg[];
-extern uint8_t test_msg_hash[];
 
 struct hash_rd_ctx {
         uint8_t *buffer;
@@ -29,134 +26,140 @@ int hash_read(const void *ctx, uint32_t offset, void *data, uint32_t len)
         return 0;
 }
 
+ZTEST_SUITE(sbk_crypto_tests, NULL, NULL, NULL, NULL, NULL);
+
+extern uint8_t test_msg[];
+extern uint8_t test_msg_bytes;
+extern uint8_t test_msg_hash[];
+extern uint8_t test_msg_hash_bytes;
+
 /**
  * @brief Test hash calculation for data in flash
  */
-void test_sbk_hash(void)
+ZTEST(sbk_crypto_tests, sbk_hash)
 {
         int err;
         struct hash_rd_ctx ctx = {
                 .buffer = test_msg,
-                .buffer_size = DIGEST_BYTES
+                .buffer_size = SBK_CRYPTO_FW_HASH_SIZE,
         };
+	struct sbk_crypto_se hash_se = {
+		.data = test_msg_hash,
+	};
 
-	err = sbk_digest_verify(test_msg_hash, &hash_read, (void *)&ctx, 
-                                DIGEST_BYTES);
+	err = sbk_crypto_hash_verify(&hash_se, &hash_read, (void *)&ctx,
+                		     test_msg_bytes);
 	zassert_true(err == 0, "Hash differs");
 }
 
 extern uint8_t test_signature[];
+extern uint8_t ec256_root_pub_key[];
 
 /**
  * @brief Test signature verification
  */
-void test_sbk_sign_verify(void)
+ZTEST(sbk_crypto_tests, sbk_sign_verify)
 {
 	int err;
 	uint8_t tmp;
+	uint8_t seal[SBK_CRYPTO_FW_SEAL_SIZE];
+	uint8_t *slptr = &seal[0];
+	struct sbk_crypto_se seal_se = {
+		.data = slptr,
+	};
 
-	err = sbk_sign_verify(test_msg_hash, test_signature);
+	memcpy(slptr, &ec256_root_pub_key[0], SBK_CRYPTO_FW_SEAL_PUBKEY_SIZE);
+	slptr += SBK_CRYPTO_FW_SEAL_PUBKEY_SIZE;
+	memcpy(slptr, &test_signature[0], SBK_CRYPTO_FW_SEAL_SIGNATURE_SIZE);
+	slptr += SBK_CRYPTO_FW_SEAL_SIGNATURE_SIZE;
+	memcpy(slptr, &test_msg_hash[0], SBK_CRYPTO_FW_SEAL_MESSAGE_SIZE);
+	err = sbk_crypto_seal_verify(&seal_se);
 	zassert_true(err == 0, "Signature validation failed: [err %d]", err);
 
 	/* modify the key */
 	tmp = test_msg_hash[0];
 	test_msg_hash[0] >>=1;
-	err = sbk_sign_verify(test_msg_hash, test_signature);
+	memcpy(slptr, &test_msg_hash[0], SBK_CRYPTO_FW_SEAL_MESSAGE_SIZE);
+	err = sbk_crypto_seal_verify(&seal_se);
 	zassert_false(err == 0, "Invalid hash generates valid signature");
 
 	/* reset the key */
 	test_msg_hash[0] = tmp;
-
 }
 
-extern uint8_t test_enc_pub_key[];
+extern uint8_t test_enc_pubkey[];
 extern uint8_t test_enc_key[];
+extern uint8_t ec256_boot_pri_key[];
 
 /**
  * @brief Test the generation of an encryption key from public key
  */
-void test_sbk_get_encr_key(void)
+ZTEST(sbk_crypto_tests, sbk_gen_encr_param)
 {
 	int err;
-	uint8_t enc_key[16], nonce[16], tmp;
+	uint8_t param[32], tmp;
+	struct sbk_crypto_se out_se = {
+		.data = &param[0],
+	};
+	const struct sbk_crypto_se pubk_se = {
+		.data = &test_enc_pubkey[0],
+	};
+	const struct sbk_crypto_se priv_se = {
+		.data = &ec256_boot_pri_key[0],
+	};
 
-	err = sbk_get_encr_key(enc_key, nonce, test_enc_pub_key, 16);
+	err = sbk_crypto_get_encr_param(&out_se, &pubk_se, &priv_se);
 	zassert_true(err == 0,  "Failed to get encryption key: [err %d]", err);
-	err = memcmp(enc_key, test_enc_key, 16);
+	err = memcmp(param, test_enc_key, 16);
 	zassert_true(err == 0,  "Encryption keys differ: [err %d]", err);
 
 	/* modify the key */
-	tmp = test_enc_pub_key[0];
-	test_enc_pub_key[0] >>= 1;
-	err = sbk_get_encr_key(enc_key, nonce, test_enc_pub_key, 16);
+	tmp = test_enc_pubkey[0];
+	test_enc_pubkey[0] >>= 1;
+	err = sbk_crypto_get_encr_param(&out_se, &pubk_se, &priv_se);
 	zassert_false(err == 0,  "Invalid pubkey generates encryption key");
 
 	/* reset the key */
-	test_enc_pub_key[0] = tmp;
+	test_enc_pubkey[0] = tmp;
 }
 
 extern uint8_t test_msg[];
+extern uint8_t test_msg_bytes;
 extern uint8_t ec256_boot_pri_key[];
-uint8_t enc_test_msg[DIGEST_BYTES];
-uint8_t dec_test_msg[DIGEST_BYTES];
 
 /**
- * @brief Test the aes enc routine
+ * @brief Test the aes routines
  */
-void test_sbk_aes_enc(void)
+ZTEST(sbk_crypto_tests, sbk_aes)
 {
+	uint8_t enc_test_msg[test_msg_bytes];
+	uint8_t dec_test_msg[test_msg_bytes];
+	uint8_t param[SBK_CRYPTO_FW_AESCTR_PAR_SIZE];
+	uint8_t *paramptr = &param[0];
+	struct sbk_crypto_se param_se = {
+		.data = paramptr,
+	};
+	uint8_t aes_bc = test_msg_bytes/SBK_CRYPTO_FW_AESCTR_BLOCK_SIZE;
 	int err;
 
-	uint8_t ctr[AES_BLOCK_SIZE]={0};
+	memcpy(paramptr, &ec256_boot_pri_key[0], SBK_CRYPTO_FW_AESCTR_KEY_SIZE);
+	paramptr += SBK_CRYPTO_FW_AESCTR_KEY_SIZE;
+	memset(paramptr, 0, SBK_CRYPTO_FW_AESCTR_CTR_SIZE);
 
-	memcpy(enc_test_msg, test_msg, DIGEST_BYTES);
-	err = sbk_aes_ctr_mode(enc_test_msg, DIGEST_BYTES, ctr,
-			      ec256_boot_pri_key);
+	memcpy(enc_test_msg, test_msg, test_msg_bytes);
+	err = sbk_crypto_aes_ctr_mode(enc_test_msg, test_msg_bytes, &param_se);
 	zassert_true(err == 0,  "AES CTR returned [err %d]", err);
-	err = ctr[15] - DIGEST_BYTES/AES_BLOCK_SIZE;
+	err = param[SBK_CRYPTO_FW_AESCTR_PAR_SIZE - 1] - aes_bc;
 	zassert_true(err == 0,  "AES CTR wrong CTR value");
-	err = memcmp(enc_test_msg, test_msg, DIGEST_BYTES);
+	err = memcmp(enc_test_msg, test_msg, test_msg_bytes);
 	zassert_false(err == 0,  "AES wrong encrypt data");
 
-}
-
-void test_sbk_aes_dec(void)
-{
-	int err;
-	uint8_t ctr[AES_BLOCK_SIZE]={0};
-
-	memcpy(dec_test_msg, enc_test_msg, DIGEST_BYTES);
-	err = sbk_aes_ctr_mode(dec_test_msg, DIGEST_BYTES, ctr,
-			      ec256_boot_pri_key);
+	memset(paramptr, 0, SBK_CRYPTO_FW_AESCTR_CTR_SIZE);
+	memcpy(dec_test_msg, enc_test_msg, test_msg_bytes);
+	err = sbk_crypto_aes_ctr_mode(dec_test_msg, test_msg_bytes, &param_se);
 	zassert_true(err == 0,  "AES CTR returned [err %d]", err);
-	err = ctr[15] - DIGEST_BYTES/AES_BLOCK_SIZE;
+	err = param[SBK_CRYPTO_FW_AESCTR_PAR_SIZE - 1] - aes_bc;
 	zassert_true(err == 0,  "AES CTR wrong CTR value");
-	err = memcmp(dec_test_msg, test_msg, DIGEST_BYTES);
+	err = memcmp(dec_test_msg, test_msg, test_msg_bytes);
 	zassert_true(err == 0,  "AES wrong decrypt data");
-
-}
-
-extern uint32_t test_msg_crc32;
-
-void test_sbk_crc32(void)
-{
-        int err;
-
-        err = sbk_crc32(0x0, test_msg, DIGEST_BYTES) - test_msg_crc32;
-	zassert_true(err == 0, "CRC32 differs");
-
-}
-
-void test_sbk_crypto(void)
-{
-	ztest_test_suite(test_sbk_crypto,
-			 ztest_unit_test(test_sbk_aes_enc),
-			 ztest_unit_test(test_sbk_aes_dec),
-			 ztest_unit_test(test_sbk_hash),
-			 ztest_unit_test(test_sbk_sign_verify),
-			 ztest_unit_test(test_sbk_get_encr_key),
-                         ztest_unit_test(test_sbk_crc32)
-	);
-
-	ztest_run_test_suite(test_sbk_crypto);
 }

@@ -12,11 +12,7 @@ extern "C" {
 
 #include <stdint.h>
 
-struct __attribute__((packed)) sbk_version {
-        uint8_t major;
-        uint8_t minor;
-        uint16_t revision;
-};
+struct sbk_version;
 
 struct __attribute__((packed)) sbk_version_range {
         struct sbk_version min_version;
@@ -32,18 +28,6 @@ struct __attribute__((packed)) sbk_device_dep_info {
         uint8_t dev_uuid[SBK_DEVICE_UUID_SIZE];
         struct sbk_version_range vrange;
 };
-
-/**
- * @brief sbk_version_u32
- *
- * Convert version structure to uint32_t
- *
- * @param ver: version as version structure
- * @retval version
- */
-uint32_t sbk_version_u32(const struct sbk_version *ver);
-
-
 
 struct sbk_os_slot;
 

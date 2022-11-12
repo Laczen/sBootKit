@@ -13,12 +13,9 @@
 #include <zephyr/linker/devicetree_regions.h>
 
 #include "sbk/sbk_os.h"
-#include "sbk/sbk_image.h"
 #include "sbk/sbk_util.h"
-
-SBK_DEVICE_UUID_DEFINE(0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, 0xBB, 0xBB,
-                       0xCC, 0xCC, 0xCC, 0xCC, 0xDD, 0xDD, 0xDD, 0xDD);
-SBK_DEVICE_VERSION_DEFINE(0,0,0);
+#include "sbk/sbk_sfsl.h"
+#include "sbk/sbk_image.h"
 
 #define SLOT0_NODE		DT_NODELABEL(slot0_partition)
 #define SLOT0_MTD               DT_MTD_FROM_FIXED_PARTITION(SLOT0_NODE)
@@ -117,9 +114,14 @@ struct sbk_shared_data shared_data Z_GENERIC_SECTION(BL_SHARED_SRAM);
 
 void main(void)
 {
-        const uint8_t *dev_uuid = sbk_get_device_uuid();
+        SBK_DEVICE_UUID_DEFINE(0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, 0xBB, 0xBB,
+                               0xCC, 0xCC, 0xCC, 0xCC, 0xDD, 0xDD, 0xDD, 0xDD);
+        SBK_DEVICE_VERSION_DEFINE(0,0,0);
 
-        memcpy(&shared_data.dev_uuid, dev_uuid, SBK_DEVICE_UUID_SIZE);
+        memcpy(&shared_data.dev_uuid, &dev_uuid, SBK_DEVICE_UUID_SIZE);
+
+        sbk_set_device_uuid(&shared_data.dev_uuid[0]);
+        sbk_set_device_version(&dev_version);
 
         if (shared_data.bcnt == SBK_BOOT_RETRIES) {
                 shared_data.bslot++;

@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+#include "sbk/sbk_sfsl.h"
 #include "sbk/sbk_image.h"
 
 #include <string.h>
@@ -10,9 +11,6 @@
 #include "sbk/sbk_util.h"
 #include "sbk/sbk_os.h"
 #include "sbk/sbk_crypto.h"
-
-extern const uint8_t dev_uuid[];
-extern const struct sbk_version dev_version;
 
 struct __attribute__((packed)) sbk_image_seal {
         struct sbk_version header_signature_version;
@@ -30,22 +28,6 @@ struct __attribute__((packed)) sbk_image_info {
         uint8_t device_dep_cnt;
         uint16_t image_offset_in_slot;
 };
-
-uint32_t sbk_version_u32(const struct sbk_version *ver)
-{
-        return (uint32_t)((ver->major << 24) + (ver->minor << 16) +
-                          ver->revision);
-}
-
-const struct sbk_version *sbk_get_device_version(void)
-{
-        return &dev_version;
-}
-
-const uint8_t *sbk_get_device_uuid(void)
-{
-        return &dev_uuid[0];
-}
 
 struct hash_read_ctx {
         const struct sbk_os_slot *slot;

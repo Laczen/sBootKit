@@ -33,6 +33,7 @@ zephyr_library_sources(
     ${SBOOTKIT_DIR}/src/sbk_crypto.c
     ${SBOOTKIT_DIR}/src/sbk_image.c
     ${SBOOTKIT_DIR}/src/sbk_os.c
+    ${SBOOTKIT_DIR}/src/sbk_sfsl.c
 )
 
 zephyr_include_directories_ifdef(CONFIG_SBK_TINYCRYPT

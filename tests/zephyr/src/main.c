@@ -54,9 +54,4 @@ uint32_t get_slot_cnt(void)
         return 1U;
 }
 
-static void jump_image(uint32_t address)
-{
-        printk("Booted image at %d\n", address);
-}
-
 int (*sbk_os_slot_init)(struct sbk_os_slot *slot, uint32_t slot_no) = slot_init;

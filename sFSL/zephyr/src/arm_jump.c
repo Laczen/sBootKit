@@ -1,10 +1,11 @@
 /*
- * Copyright (c) 2021 Laczen
+ * Copyright (c) 2022 Laczen
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <soc.h>
+#include <zephyr/irq.h>
 
 #if defined(CONFIG_CPU_AARCH32_CORTEX_A) || defined(CONFIG_CPU_AARCH32_CORTEX_R)
 #include <zephyr/arch/arm/aarch32/cortex_a_r/cmsis.h>

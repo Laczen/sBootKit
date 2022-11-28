@@ -48,20 +48,3 @@ int sbk_os_slot_close(const struct sbk_os_slot *slot)
         SBK_ASSERT(slot->sync);
         return slot->sync(slot->ctx);
 }
-
-bool sbk_os_slot_address_in_slot(const struct sbk_os_slot *slot,
-                                 const uint32_t address)
-{
-        SBK_ASSERT(slot);
-        SBK_ASSERT(slot->get_start_address);
-        SBK_ASSERT(slot->get_size);
-
-        const uint32_t slot_start = slot->get_start_address(slot);
-        const uint32_t slot_end = slot_start + slot->get_size(slot);
-
-        if ((address < slot_start) || (address > slot_end)) {
-                return false;
-        }
-
-        return true;
-}

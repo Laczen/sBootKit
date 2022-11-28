@@ -30,61 +30,31 @@ enum sbk_error_codes {
         SBK_EC_EFAULT = 14,
 };
 
-/**
- * @brief Enumerate log codes
- *
- */
-enum sbk_log_codes {
-        SBK_LOG_LEVEL_OFF = 0,
-        SBK_LOG_LEVEL_ERROR = 1,
-        SBK_LOG_LEVEL_WARN = 1,
-        SBK_LOG_LEVEL_INFO = 2,
-        SBK_LOG_LEVEL_DEBUG = 3,
-};
-
-#ifndef SBK_LOG
-#define SBK_LOG(...)
+#ifdef CONFIG_SBK_OS_INCLUDE
+#define SBK_STRINGIZE(x) SBK_STRINGIZE2(x)
+#define SBK_STRINGIZE2(x) #x
+#include SBK_STRINGIZE(CONFIG_SBK_OS_INCLUDE)
 #endif
 
-#ifndef SBK_LOG_LEVEL
-#define SBK_LOG_LEVEL SBK_LOG_LEVEL_INFO
+#ifndef SBK_LOG_ERR
+#define SBK_LOG_ERR(...)
 #endif
 
-#define SBK_LOG_ERR(_fmt, ...)                                                 \
-do {                                                                           \
-        if (SBK_LOG_LEVEL >= SBK_LOG_LEVEL_ERROR) {                            \
-                SBK_LOG("ERR:" # _fmt, __VA_ARGS__);                           \
-        }                                                                      \
-} while (0)
+#ifndef SBK_LOG_WRN
+#define SBK_LOG_WRN(...)
+#endif
 
-#define SBK_LOG_WRN(_fmt, ...)                                                 \
-do {                                                                           \
-        if (SBK_LOG_LEVEL >= SBK_LOG_LEVEL_WARN) {                             \
-                SBK_LOG("WRN:" # _fmt, __VA_ARGS__);                           \
-        }                                                                      \
-} while (0)
+#ifndef SBK_LOG_INF
+#define SBK_LOG_INF(...)
+#endif
 
-#define SBK_LOG_INF(_fmt, ...)                                                 \
-do {                                                                           \
-        if (SBK_LOG_LEVEL >= SBK_LOG_LEVEL_INFO) {                             \
-                SBK_LOG("INF:" # _fmt, __VA_ARGS__);                           \
-        }                                                                      \
-} while (0)
+#ifndef SBK_LOG_DBG
+#define SBK_LOG_DBG(...)
+#endif
 
-#define SBK_LOG_DBG(_fmt, ...)                                                 \
-do {                                                                           \
-        if (SBK_LOG_LEVEL >= SBK_LOG_LEVEL_DEBUG) {                            \
-                SBK_LOG("DBG:" # _fmt, __VA_ARGS__);                           \
-        }                                                                      \
-} while (0)
-
-#define SBK_ASSERT(EXPR)                                                       \
-do {                                                                           \
-        if ((SBK_LOG_LEVEL >= SBK_LOG_LEVEL_DEBUG) && (!EXPR)) {               \
-                SBK_LOG("ASSERT for %s at %s", #EXPR, __func__);               \
-                while (1);                                                     \
-        }                                                                      \
-} while (0)
+#ifndef SBK_ASSERT
+#define SBK_ASSERT(...)
+#endif
 
 #ifdef __cplusplus
 } /* extern "C" */

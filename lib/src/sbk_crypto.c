@@ -61,6 +61,24 @@ uint8_t *sbk_crypto_hash_from_seal(const struct sbk_crypto_se *seal_se)
         ret += SBK_CRYPTO_FW_SEAL_SIGNATURE_SIZE;
         return ret;
 }
+
+uint8_t *sbk_crypto_pkey_from_seal(const struct sbk_crypto_se *seal_se)
+{
+        uint8_t *ret;
+
+        ret = seal_se->data;
+        return ret;
+}
+
+int sbk_crypto_seal_pkey_verify(const struct sbk_crypto_se *seal_se,
+                                uint8_t *pkey)
+{
+        if (memcmp(seal_se->data, pkey, SBK_CRYPTO_FW_SEAL_PUBKEY_SIZE) != 0) {
+                return -SBK_EC_EFAULT;
+        }
+
+        return 0;
+}
 #endif /* CONFIG_SBK_TINYCRYPT */
 
 #ifdef CONFIG_SBK_TINYCRYPT

@@ -1,0 +1,55 @@
+/*
+ * Copyright (c) 2022 Laczen
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/ {
+	chosen {
+		zephyr,code-partition = &sfsl_partition;
+	};
+};
+
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		sfsl_partition: partition@0 {
+			label = "sFSL";
+			reg = <0x00000000 0x00004000>;
+		};
+
+		storage_partition: partition@4000 {
+			label = "storage";
+			reg = <0x00004000 0x0000C000>;
+		};
+
+		slot0_partition: partition@20000 {
+			label = "image";
+			reg = <0x00020000 0x00060000>;
+		};
+
+		slot1_partition: partition@10000 {
+			label = "loader";
+			reg = <0x00010000 0x00010000>;
+		};
+	};
+};
+
+/ {
+	bl_shared_ram {
+		#address-cells = < 0x1 >;
+		#size-cells = < 0x1 >;
+
+		bl_shared_sram: sram@20000000 {
+			compatible = "zephyr,memory-region", "mmio-sram";
+			reg = < 0x20000000 0x0020 >;
+			zephyr,memory-region = "BL_SHARED_SRAM";
+		};
+	};
+};
+
+
+

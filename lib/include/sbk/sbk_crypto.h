@@ -68,18 +68,18 @@ int sbk_crypto_get_encr_param(struct sbk_crypto_se *out_se,
  *
  * Verifies the firmware seal
  *
- * @param seal: seal data (pubkey, signature, message hash) as secure element
+ * @param seal_se: seal data (pubkey, signature, message hash) as secure element
  * @retval -ERRNO errno code if error
  * @retval 0 if succesfull
  */
 int sbk_crypto_seal_verify(const struct sbk_crypto_se *seal_se);
 
 /**
- * @brief sbk_crypto_msg_from_seal
+ * @brief sbk_crypto_hash_from_seal
  *
  * Get a pointer to the message hash from a seal
  *
- * @param seal: seal data (pubkey, signature, message hash) as secure element
+ * @param seal_se: seal data (pubkey, signature, message hash) as secure element
  */
 uint8_t *sbk_crypto_hash_from_seal(const struct sbk_crypto_se *seal_se);
 
@@ -99,6 +99,19 @@ int sbk_crypto_hash_verify(const struct sbk_crypto_se *hash_se,
                            int (*read_cb)(const void *ctx, uint32_t offset,
                                           void *data,uint32_t len),
                            const void *read_cb_ctx, uint32_t len);
+
+/**
+ * @brief sbk_crypto_seal_pkey_verify
+ *
+ * Verifies the pubkey used in the seal
+ *
+ * @param seal_se: seal data (pubkey, signature, message hash) as secure element
+ * @param pkey: pubkey to verify
+ * @retval -ERRNO errno code if error
+ * @retval 0 if succesfull
+ */
+int sbk_crypto_seal_pkey_verify(const struct sbk_crypto_se *seal_se,
+                                uint8_t *pkey);
 
 /**
  * @brief sbk_crypto_aes_ctr_mode

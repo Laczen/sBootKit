@@ -1,0 +1,4 @@
+name: sbootkit
+build:
+  cmake: zephyr
+  kconfig: zephyr/Kconfig

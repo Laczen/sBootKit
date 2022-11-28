@@ -91,14 +91,6 @@ int sbk_os_slot_prog(const struct sbk_os_slot *slot, uint32_t off,
  */
 int sbk_os_slot_close(const struct sbk_os_slot *slot);
 
-/**
- * @brief sbk_os_slot_address_in_slot
- *
- * checks if an address is inside a slot
- */
-bool sbk_os_slot_address_in_slot(const struct sbk_os_slot *slot,
-                                 const uint32_t address);
-
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

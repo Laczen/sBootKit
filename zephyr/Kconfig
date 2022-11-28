@@ -13,6 +13,12 @@ config SBK
 config SBK_TINYCRYPT
         bool "Enable tinycrypt"
 
-endmenu
+if SBK
 
-source "Kconfig.zephyr"
+module = SBK
+module-str = sbk
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # SBK
+
+endmenu

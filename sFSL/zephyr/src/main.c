@@ -14,7 +14,7 @@
 
 #include "sbk/sbk_os.h"
 #include "sbk/sbk_util.h"
-#include "sbk/sbk_sfsl.h"
+#include "sbk/sbk_board.h"
 #include "sbk/sbk_image.h"
 
 #define SLOT0_NODE		DT_NODELABEL(slot0_partition)
@@ -40,7 +40,8 @@
  */
 
 struct sbk_shared_data {
-        uint8_t dev_uuid[16];
+        uint32_t board_id;
+        struct sbk_version dev_version;
         uint8_t bslot;
         uint8_t bcnt;
 };
@@ -114,44 +115,45 @@ struct sbk_shared_data shared_data Z_GENERIC_SECTION(BL_SHARED_SRAM);
 
 void main(void)
 {
-        SBK_DEVICE_UUID_DEFINE(0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, 0xBB, 0xBB,
-                               0xCC, 0xCC, 0xCC, 0xCC, 0xDD, 0xDD, 0xDD, 0xDD);
-        SBK_DEVICE_VERSION_DEFINE(0,0,0);
+        SBK_LOG_DBG("Welcome to sFSL");
 
-        memcpy(&shared_data.dev_uuid, &dev_uuid, SBK_DEVICE_UUID_SIZE);
+        shared_data.board_id = 0xAABBCCDD;
+        shared_data.dev_version.major = 0;
+        shared_data.dev_version.minor = 0;
+        shared_data.dev_version.revision = 0;
 
-        sbk_set_device_uuid(&shared_data.dev_uuid[0]);
-        sbk_set_device_version(&dev_version);
+        sbk_init_board_id(&shared_data.board_id);
+        sbk_init_board_version(&shared_data.dev_version);
 
         if (shared_data.bcnt == SBK_BOOT_RETRIES) {
                 shared_data.bslot++;
                 shared_data.bcnt = 0U;
         }
 
-        struct sbk_os_slot slot;
+        if (shared_data.bslot > ARRAY_SIZE(slot_ctx)) {
+                shared_data.bslot = ARRAY_SIZE(slot_ctx);
+        }
+
         uint32_t address;
         int rc;
+
 
         for (uint32_t i = 0; i < ARRAY_SIZE(slot_ctx); i++) {
                 if (shared_data.bslot == ARRAY_SIZE(slot_ctx)) {
                         shared_data.bslot = 0U;
                 }
 
-                rc = sbk_os_slot_open(&slot, shared_data.bslot);
+                rc = sbk_image_bootable(shared_data.bslot, &address);
                 if (rc != 0) {
                         shared_data.bslot++;
                         shared_data.bcnt = 0U;
                         continue;
                 }
 
-                rc = sbk_image_bootable(&slot, &address);
-                if (rc == 0) {
-                        jump_image(address);
-                }
-
-                (void)sbk_os_slot_close(&slot);
-
+                jump_image(address);
         }
+
+        SBK_LOG_DBG("Nothing to boot...");
 
         while(1);
 }

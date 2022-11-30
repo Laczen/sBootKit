@@ -12,6 +12,8 @@
 #include "sbk/sbk_image.h"
 #include "sbk/sbk_os.h"
 
+#include "testimage0.h"
+
 uint32_t board_id = 0xAABBCCDD;
 struct sbk_version board_version = {
         .major = 0,
@@ -160,4 +162,56 @@ ZTEST(sbk_image_tests, sbk_board_dependency)
 
         err = sbk_os_slot_close(&slot);
         zassert_true(err == 0, "Failed slot close: [err %d]", err);
+}
+
+/*
+ * @brief
+ */
+ZTEST(sbk_image_tests, sbk_signed_image)
+{
+        struct sbk_os_slot slot;
+        int err;
+
+        sbk_init_board_id(&board_id);
+        sbk_init_board_version(&board_version);
+
+        err = sbk_os_slot_open(&slot, 0);
+        zassert_true(err == 0, "Failed slot open: [err %d]", err);
+
+        err = sbk_os_slot_prog(&slot, 0U, &image_0, sizeof(image_0));
+        zassert_true(err == 0, "Failed slot program: [err %d]", err);
+
+        err = sbk_image_board_verify(&slot);
+        zassert_true(err == 0, "Failed board verify: [err %d]", err);
+
+        err = sbk_image_seal_verify(&slot);
+        zassert_true(err == 0, "Failed seal verify: [err %d]", err);
+
+        err = sbk_os_slot_close(&slot);
+        zassert_true(err == 0, "Failed slot close: [err %d]", err);
+}
+
+/*
+ * @brief
+ */
+ZTEST(sbk_image_tests, sbk_bootable_image)
+{
+        struct sbk_os_slot slot;
+        uint32_t address;
+        int err;
+
+        sbk_init_board_id(&board_id);
+        sbk_init_board_version(&board_version);
+
+        err = sbk_os_slot_open(&slot, 0);
+        zassert_true(err == 0, "Failed slot open: [err %d]", err);
+
+        err = sbk_os_slot_prog(&slot, 0U, &image_0, sizeof(image_0));
+        zassert_true(err == 0, "Failed slot program: [err %d]", err);
+
+        err = sbk_os_slot_close(&slot);
+        zassert_true(err == 0, "Failed slot close: [err %d]", err);
+
+        err = sbk_image_bootable(0, &address);
+        zassert_true(err == 0, "Failed bootable image check: [err %d]", err);
 }

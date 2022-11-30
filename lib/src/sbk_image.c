@@ -80,6 +80,7 @@ static int tagdata_cb(void *cb_ctx, uint32_t pos, uint16_t rlen)
         struct tagdata_cb_ctx *ctx = (struct tagdata_cb_ctx *)cb_ctx;
 
         if (ctx->dsize != (uint32_t)rlen) {
+                LOG_DBG("TAG has wrong size");
                 return -SBK_EC_ENOENT;
         }
 
@@ -136,7 +137,7 @@ int sbk_image_get_state(const struct sbk_os_slot *slot, uint32_t cnt,
 
         while (true) {
                 rc = sbk_image_get_tag_data(slot, state_tag, (void *)state,
-                                            sizeof(state));
+                                            sizeof(struct sbk_image_state));
                 if (rc != 0) {
                         goto end;
                 }
@@ -154,32 +155,27 @@ end:
 }
 
 int sbk_image_hash_verify(const struct sbk_os_slot *slot,
+                          const struct sbk_image_state *state,
                           int (*read_cb)(const void *ctx, uint32_t offset,
                                          void *data, uint32_t len),
-                          const void *read_cb_ctx, uint32_t cnt)
+                          const void *read_cb_ctx)
 {
-        struct sbk_image_state state;
+        struct sbk_image_hash hash;
         int rc;
 
-        rc = sbk_image_get_state(slot, cnt, &state);
+        rc = sbk_image_get_tag_data(slot, state->hash_tag, &hash, sizeof(hash));
         if (rc != 0) {
-                goto end;
-        }
-
-        struct sbk_image_hash hash;
-
-        rc = sbk_image_get_tag_data(slot, state.hash_tag, &hash, sizeof(hash));
-        if (rc != 0) {
+                LOG_DBG("HASH not found");
                 goto end;
         }
 
         struct sbk_crypto_se hash_se = {
-                .data = &hash,
+                .data = &hash.digest,
         };
 
         /* verify the hash */
         return sbk_crypto_hash_verify(&hash_se, read_cb, read_cb_ctx,
-                                      state.size);
+                                      state->size);
 end:
         return rc;
 }
@@ -204,7 +200,8 @@ int sbk_image_seal_verify(const struct sbk_os_slot *slot)
 
         rc = sbk_image_get_tag_data(slot, tag, &seal, sizeof(seal));
         if (rc != 0) {
-                 goto end;
+                LOG_DBG("SEAL not found");
+                goto end;
         }
 
         /* verify the image metadata hash */
@@ -212,7 +209,7 @@ int sbk_image_seal_verify(const struct sbk_os_slot *slot)
                 .slot = slot,
         };
         struct sbk_crypto_se seal_se = {
-                .data = &seal,
+                .data = &seal.seal,
         };
         struct sbk_crypto_se hash_se = {
                 .data = sbk_crypto_hash_from_seal(&seal_se),
@@ -226,11 +223,15 @@ int sbk_image_seal_verify(const struct sbk_os_slot *slot)
 
         rc = sbk_crypto_hash_verify(&hash_se, read_cb, (void *)&cb_ctx, pos);
         if (rc != 0) {
+                LOG_DBG("MESSAGE hash error");
                 goto end;
         }
 
         /* verify the signature */
         rc = sbk_crypto_seal_verify(&seal_se);
+        if (rc != 0) {
+                LOG_DBG("SIGNATURE invalid");
+        }
 end:
         return rc;
 }
@@ -247,7 +248,7 @@ int sbk_image_pkey_compare(const struct sbk_os_slot *slot, uint8_t *pkey)
         }
 
         struct sbk_crypto_se seal_se = {
-                .data = &seal,
+                .data = &seal.seal,
         };
 
         return sbk_crypto_seal_pkey_verify(&seal_se, pkey);
@@ -379,7 +380,7 @@ int sbk_image_bootable(uint16_t slot_no, uint32_t *address)
 
         rc = sbk_os_slot_open(&slot, slot_no);
         if (rc != 0) {
-                goto end;
+                goto end_noslot;
         }
 
         rc = sbk_image_seal_verify(&slot);
@@ -392,7 +393,8 @@ int sbk_image_bootable(uint16_t slot_no, uint32_t *address)
                 goto end;
         }
 
-        if (state.slot != slot_no) {
+        if ((state.slot != slot_no) ||
+            (state.state_type != SBK_IMAGE_STATE_BOOTABLE)) {
                 rc = -SBK_EC_EFAULT;
                 goto end;
         }
@@ -402,25 +404,43 @@ int sbk_image_bootable(uint16_t slot_no, uint32_t *address)
                 goto end;
         }
 
-        rc = sbk_image_dependency_verify(&slot);
-        if (rc != 0) {
-                goto end;
-        }
-
         const struct read_cb_ctx cb_ctx = {
                 .slot = &slot,
                 .offset = state.offset,
         };
 
-        rc = sbk_image_hash_verify(&slot, read_cb, (void *)&cb_ctx, 0U);
+        rc = sbk_image_hash_verify(&slot, &state, read_cb, (void *)&cb_ctx);
         if (rc != 0) {
                 goto end;
         }
 
         *address = slot.get_start_address(slot.ctx) + state.offset;
-
-        (void)sbk_os_slot_close(&slot);
-
 end:
+        (void)sbk_os_slot_close(&slot);
+end_noslot:
+        return rc;
+}
+
+int sbk_image_get_version(uint16_t slot_no, struct sbk_version *version)
+{
+        const uint16_t tag = SBK_IMAGE_START_TAG;
+        struct sbk_os_slot slot;
+        struct sbk_image_meta_start start;
+        int rc;
+
+        rc = sbk_os_slot_open(&slot, slot_no);
+        if (rc != 0) {
+                goto end_noslot;
+        }
+
+        rc = sbk_image_get_tag_data(&slot, tag, (void *)&start, sizeof(start));
+        if (rc) {
+                goto end;
+        }
+
+        memcpy(version, &start.image_version, sizeof(struct sbk_version));
+end:
+        (void)sbk_os_slot_close(&slot);
+end_noslot:
         return rc;
 }

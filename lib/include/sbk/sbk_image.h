@@ -14,6 +14,9 @@ extern "C" {
 
 #define SBK_IMAGE_START_TAG 0x8000
 #define SBK_IMAGE_SEAL_TAG 0x7FFF
+#define SBK_IMAGE_STATE_BOOTABLE 0x0080
+#define SBK_IMAGE_STATE_ENCRYPTED 0x8081
+#define SBK_IMAGE_STATE_ZIPPED 0x8082
 
 struct sbk_version;
 struct sbk_version_range;
@@ -52,10 +55,10 @@ struct __attribute__((packed)) sbk_image_state {
         uint16_t slot;
         uint16_t offset;
         uint32_t size;
+        uint16_t state_type;
         uint16_t hash_tag;
         uint16_t transform_tag;
         uint16_t next_tag;
-        uint16_t pad16;
 };
 
 struct sbk_os_slot;
@@ -129,17 +132,18 @@ int sbk_image_seal_verify(const struct sbk_os_slot *slot);
  * Verify the hash of an image
  *
  * @param slot: slot where the image is located
+ * @param state: image state
  * @param read_cb: read callback function
  * @param read_cb_ctx: read callback context
- * @param cnt: image state count
  * @retval -ERRNO errno code if error
  * @retval 0 if succesfull
  *
  */
 int sbk_image_hash_verify(const struct sbk_os_slot *slot,
+                          const struct sbk_image_state *state,
                           int (*read_cb)(const void *ctx, uint32_t offset,
                                          void *data, uint32_t len),
-                          const void *read_cb_ctx, uint32_t cnt);
+                          const void *read_cb_ctx);
 
 /**
  * @brief sbk_image_get_tag_data
@@ -164,6 +168,16 @@ int sbk_image_get_tag_data(const struct sbk_os_slot *slot, uint16_t tag,
  * @param address: returns the start address if the image is bootable
  */
 int sbk_image_bootable(uint16_t slot_no, uint32_t *address);
+
+/**
+ * @brief sbk_image_get_version
+ *
+ * Check if image in slot is bootable
+ *
+ * @param slot_no: the slot to check,
+ * @param version: returns the version as sbk_version
+ */
+int sbk_image_get_version(uint16_t slot_no, struct sbk_version *version);
 
 
 #ifdef __cplusplus

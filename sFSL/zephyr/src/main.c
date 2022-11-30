@@ -17,6 +17,13 @@
 #include "sbk/sbk_board.h"
 #include "sbk/sbk_image.h"
 
+#define BOARD_ID 0xAABBCCDD
+#define BOARD_VER_MAJ 0
+#define BOARD_VER_MIN 0
+#define BOARD_VER_REV 0
+
+#define FLASH_OFFSET CONFIG_FLASH_BASE_ADDRESS
+
 #define SLOT0_NODE		DT_NODELABEL(slot0_partition)
 #define SLOT0_MTD               DT_MTD_FROM_FIXED_PARTITION(SLOT0_NODE)
 #define SLOT0_DEVICE	        DEVICE_DT_GET(SLOT0_MTD)
@@ -33,15 +40,15 @@
 #define BL_SHARED_SRAM_ADDR	DT_REG_ADDR(BL_SHARED_SRAM_NODE)
 #define BL_SHARED_SRAM_SIZE	DT_REG_SIZE(BL_SHARED_SRAM_NODE)
 
-#define SBK_BOOT_RETRIES        4
+#define BOOT_RETRIES 4
 
 /**
  * @brief shared data format definition
  */
 
 struct sbk_shared_data {
-        uint32_t board_id;
-        struct sbk_version dev_version;
+        uint32_t brd_id;
+        struct sbk_version brd_ver;
         uint8_t bslot;
         uint8_t bcnt;
 };
@@ -52,7 +59,7 @@ struct flash_slot_ctx {
         uint32_t size;
 };
 
-const struct flash_slot_ctx slot_ctx[2] = {
+const struct flash_slot_ctx slots[2] = {
         {
                 .dev = SLOT0_DEVICE,
                 .off = SLOT0_OFFSET,
@@ -88,7 +95,7 @@ static uint32_t get_start_address(const void *ctx)
 {
         const struct flash_slot_ctx *sctx = (const struct flash_slot_ctx *)ctx;
 
-        return sctx->off;
+        return FLASH_OFFSET + sctx->off;
 }
 
 static uint32_t get_size(const void *ctx)
@@ -100,7 +107,7 @@ static uint32_t get_size(const void *ctx)
 
 static int slot_init(struct sbk_os_slot *slot, uint32_t slot_no)
 {
-        slot->ctx = (void *)&slot_ctx[slot_no];
+        slot->ctx = (void *)&slots[slot_no];
         slot->read = read;
         slot->prog = prog;
         slot->sync = sync;
@@ -115,31 +122,30 @@ struct sbk_shared_data shared_data Z_GENERIC_SECTION(BL_SHARED_SRAM);
 
 void main(void)
 {
-        SBK_LOG_DBG("Welcome to sFSL");
-
-        shared_data.board_id = 0xAABBCCDD;
-        shared_data.dev_version.major = 0;
-        shared_data.dev_version.minor = 0;
-        shared_data.dev_version.revision = 0;
-
-        sbk_init_board_id(&shared_data.board_id);
-        sbk_init_board_version(&shared_data.dev_version);
-
-        if (shared_data.bcnt == SBK_BOOT_RETRIES) {
-                shared_data.bslot++;
+        if ((shared_data.brd_id != BOARD_ID) ||
+            (shared_data.bcnt > BOOT_RETRIES) ||
+            (shared_data.bslot >= ARRAY_SIZE(slots))) {
+                shared_data.brd_id = BOARD_ID;
+                shared_data.brd_ver.major = BOARD_VER_MAJ;
+                shared_data.brd_ver.minor = BOARD_VER_MIN;
+                shared_data.brd_ver.revision = BOARD_VER_REV;
+                shared_data.bslot = ARRAY_SIZE(slots) - 1U;
                 shared_data.bcnt = 0U;
         }
 
-        if (shared_data.bslot > ARRAY_SIZE(slot_ctx)) {
-                shared_data.bslot = ARRAY_SIZE(slot_ctx);
+        sbk_init_board_id(&shared_data.brd_id);
+        sbk_init_board_version(&shared_data.brd_ver);
+
+        if (shared_data.bcnt == BOOT_RETRIES) {
+                shared_data.bslot++;
+                shared_data.bcnt = 0U;
         }
 
         uint32_t address;
         int rc;
 
-
-        for (uint32_t i = 0; i < ARRAY_SIZE(slot_ctx); i++) {
-                if (shared_data.bslot == ARRAY_SIZE(slot_ctx)) {
+        for (uint32_t i = 0; i < ARRAY_SIZE(slots); i++) {
+                if (shared_data.bslot == ARRAY_SIZE(slots)) {
                         shared_data.bslot = 0U;
                 }
 
@@ -150,10 +156,9 @@ void main(void)
                         continue;
                 }
 
+                shared_data.bcnt++;
                 jump_image(address);
         }
-
-        SBK_LOG_DBG("Nothing to boot...");
 
         while(1);
 }

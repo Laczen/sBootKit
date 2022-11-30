@@ -30,14 +30,16 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 
-BYTE_ALIGNMENT = 8 # Output hex file is aligned to BYTE_ALIGNMENT
+BYTE_ALIGNMENT = 32 # Output hex file is aligned to BYTE_ALIGNMENT
 MIN_HDRSIZE = 512
-SBK_IMAGE_META_OPENING_INFO = 0x7546,
-SBK_IMAGE_META_SIGNATURE_INFO = 0xC918,
-SBK_IMAGE_META_IMAGE_INFO = 0xC67C,
-SBK_IMAGE_META_IMAGE_DEPENDENCY_INFO = 0x2768,
-SBK_IMAGE_META_IMAGE_DEVICE_INFO = 0xBA54,
-SBK_IMAGE_META_CLOSING_INFO = 0xA8AC,
+SBK_IMAGE_META_START_TAG = 0x8000
+SBK_IMAGE_META_SEAL_TAG = 0x7FFF
+SBK_IMAGE_STATE_BOOTABLE = 0x0080
+SBK_IMAGE_STATE_ENCRYPTED = 0x8081
+SBK_IMAGE_STATE_ZIPPED = 0x8082
+SBK_IMAGE_HASH_TYPE_SHA256 = 0x0080
+SBK_IMAGE_SEAL_TYPE_EDSA256 = 0x0080
+
 INTEL_HEX_EXT = "hex"
 STRUCT_ENDIAN_DICT = {
         'little': '<',
@@ -45,32 +47,44 @@ STRUCT_ENDIAN_DICT = {
 }
 
 class Image():
-    def __init__(self, hdrsize = None, load_address = None, dest_slot = None,
+    def __init__(self, hdrsize = None, load_slot = None, download_slot = None,
                  version = 0, endian='little', type = 'image',
                  dep_slot = None, dep_min_ver = None, dep_max_ver = None):
         self.hdrsize = hdrsize
-        self.load_address = load_address
-        self.dest_slot = dest_slot
+        self.load_slot = load_slot
+        self.download_slot = download_slot
         self.version = version or versmod.decode_version("0")
         self.endian = endian
         self.payload = []
         self.size = 0
         self.dep_slot = dep_slot or None
-        self.dep_min_ver = dependency[2] or versmod.decode_version("0")
-        self.dep_max_ver = dependency[3] or versmod.decode_version("255.255.65535")
+        self.dep_min_ver = dep_min_ver or versmod.decode_version("0")
+        self.dep_max_ver = dep_max_ver or versmod.decode_version("255.255.65535")
+        self.meta_cnt = 0;
 
     def __repr__(self):
-        return "<hdrsize={}, load_address={}, dest_slot={}, \
+        return "<hdrsize={}, load_slot={}, dest_slot={}, \
                 Image version={}, endian={}, type={} format={}, \
                 payloadlen=0x{:x}>".format(
                     self.hdrsize,
-                    self.load_address,
-                    self.dest_slot,
+                    self.load_slot,
+                    self.download_slot,
                     self.version,
                     self.endian,
                     self.type,
                     self.__class__.__name__,
                     len(self.payload))
+
+    def get_tag(self):
+        self.meta_cnt += 1
+        value = self.meta_cnt & 0x7FFF
+        value ^= value >> 8
+        value ^= value >> 4
+        value &= 0xf
+        if ((0x6996 >> value) & 1) == 0:
+            return self.meta_cnt | 0x8000
+
+        return self.meta_cnt
 
     def load(self, path):
         """Load an image from a given file"""
@@ -93,11 +107,11 @@ class Image():
         else:
             self.run_address = ih.minaddr() + self.hdrsize
 
-        if self.dest_slot == None:
-            self.dest_slot = 0;
+        if self.download_slot == None:
+            self.download_slot = 0;
 
-        if self.load_address == None:
-            self.load_address = 0;
+        if self.load_slot == None:
+            self.load_slot = 0;
 
         self.size = len(self.payload) - self.hdrsize;
 
@@ -111,7 +125,7 @@ class Image():
             raise Exception("Only hex input file supported")
 
         h = IntelHex()
-        h.frombytes(bytes=self.payload, offset=self.load_address)
+        h.frombytes(bytes=self.payload)
         h.tofile(path, 'hex')
 
     def check(self):
@@ -128,8 +142,8 @@ class Image():
         sha = hashlib.sha256()
         sha.update(self.payload[self.hdrsize:])
         hash = sha.digest()
-        epubk = bytearray(len(signkey.get_public_key_bytearray()))
-        ehash = hash
+        epubk = None
+        ehash = None
 
         if encrkey is not None:
 
@@ -166,46 +180,100 @@ class Image():
 
     def add_header(self, hash, epubk, ehash, signkey):
         """Install the image header."""
-        # info_hdr struct
         e = STRUCT_ENDIAN_DICT[self.endian]
-        info_hdr_fmt = (e +
-            # struct info_hdr
-            'H' + #uint16_t tag;
-            'H' #uint16_t payloadsize;
+
+        image_dep_tag = self.get_tag()
+        board_dep_tag = 0
+        image_state_tag = [self.get_tag()]
+        image_hash_tag = [self.get_tag()]
+
+        start_fmt = (e +
+            'HH' +  # rec_tag + rec_len
+            'BBH' + # Image version
+            'H' +   # Image dep tag
+            'H' +   # Board dep tag
+            'H' +   # Image state tag
+            'H'     # Next tag (set to 0x7FFF)
+        )
+        hdr = struct.pack(start_fmt,
+            SBK_IMAGE_META_START_TAG, struct.calcsize(start_fmt),
+            self.version.major or 0, self.version.minor or 0, self.version.revision or 0,
+            image_dep_tag,
+            board_dep_tag,
+            image_state_tag[0],
+            0x7FFF,
         )
 
-        # start from the back and keep adding items to the front;
-        info_hdr = struct.pack(info_hdr_fmt, SBK_IMAGE_META_CLOSING_INFO, 0);
-        hdr = info_hdr;
-
-        dep_fmt = (e +
-            # dependency info {
-            'I' +   # Image slot
-            'BBH' + # Image dep min
-            'BBH'   # Image dep max
-            ) #}
-        dep = struct.pack(dep_fmt,
-            self.dest_slot,
+        image_dep_fmt = (e +
+            'HH' +  # rec_tag + rec_len
+            'BBH' + # minimum version
+            'BBH' + # maximum version
+            'H' +   # run slot
+            'H'     # next image dependency tag
+        )
+        hdr += struct.pack(image_dep_fmt,
+            image_dep_tag, struct.calcsize(image_dep_fmt),
             0,0,0,
-            self.version.major or 0,
-            self.version.minor or 0,
-            self.version.revision or 0
-            )
-        info_hdr = struct.pack(info_hdr_fmt,
-            SBK_IMAGE_META_IMAGE_DEPENDENCY_INFO,
-            len(dep));
-        hdr = info_hdr + dep + hdr;
+            self.version.major or 0, self.version.minor or 0, self.version.revision or 0,
+            self.load_slot,
+            0
+        )
 
-        filler = bytearray(self.hdr_size - len(hdr) - 4);
-        info_hdr = struct.pack(info_hdr_fmt,
-            SBK_IMAGE_META_OPENING_INFO,
-            len(filler));
-        hdr = filler + info_hdr + hdr;
+        image_state_fmt = (e +
+            'HH' +  # rec_tag + rec_len
+            'H' +   # slot
+            'H' +   # offset
+            'I' +   # size
+            'H' +   # state type
+            'H' +   # hash tag
+            'H' +   # transform tag
+            'H'     # next image state tag
+        )
+        hdr += struct.pack(image_state_fmt,
+            image_state_tag[0], struct.calcsize(image_state_fmt),
+            self.load_slot,
+            self.hdrsize,
+            len(self.payload) - self.hdrsize,
+            SBK_IMAGE_STATE_BOOTABLE,
+            image_hash_tag[0],
+            0,
+            0
+        )
+
+        image_hash_fmt = (e +
+            'HH' +  # rec_tag + rec_len
+            'H' +   # type
+            'H'     # pad16
+        )
+        hdr += struct.pack(image_hash_fmt,
+            image_hash_tag[0], struct.calcsize(image_hash_fmt) + len(hash),
+            SBK_IMAGE_HASH_TYPE_SHA256,
+            0
+        )
+        hdr += hash
+
+        if ((epubk is not None) and (ehash is not None)):
+            print("TODO add encryption")
 
         sha = hashlib.sha256()
         sha.update(hdr)
-        hdr_hash = sha.digest()
-        hdr_signature = signkey.sign_prehashed(hdr_hash)
+        seal_msg = sha.digest()
+        seal_pubk = signkey.get_public_key_bytearray()
+        seal_sign = signkey.sign_prehashed(seal_msg)
+        seal_len = len(seal_pubk) + len(seal_msg) + len(seal_sign)
+        image_seal_fmt = (e +
+            'HH' +  # rec_tag + rec_len
+            'H' +   # type
+            'H'     # pad16
+        )
+        hdr += struct.pack(image_seal_fmt,
+            SBK_IMAGE_META_SEAL_TAG, struct.calcsize(image_seal_fmt) + seal_len,
+            SBK_IMAGE_SEAL_TYPE_EDSA256,
+            0
+        )
+        hdr += seal_pubk
+        hdr += seal_sign
+        hdr += seal_msg
 
         self.payload = bytearray(self.payload)
         self.payload[0:len(hdr)] = hdr

@@ -137,10 +137,10 @@ class BasedIntParamType(click.ParamType):
               type = BasedIntParamType(),
               help = 'Size of the header that was prepended during image \
 generation')
-@click.option('-la','--load-address', type = BasedIntParamType(),
-              help = 'Address where the image should be loaded to')
-@click.option('-ds','--destination-slot', required = True, type = BasedIntParamType(),
-              help = 'Destination of the slot the image will be run from')
+@click.option('-ls','--load-slot', type = BasedIntParamType(),
+              help = 'Slot number where the image should be run from')
+@click.option('-ds','--download-slot', type = BasedIntParamType(),
+              help = 'Slot number where the image should be downloaded')
 @click.option('-v', '--version', callback = validate_version, type = str)
 @click.option('-sk','--signkey', metavar = 'filename',
               help = 'Sign image using the provided sign key')
@@ -154,28 +154,22 @@ generation')
               help = 'generate test image as c file')
 @click.command(help='''Create a image for use with sBootKit\n
                INFILE and OUTFILE are of type hex''')
-def create(hdrsize, load_address, destination_slot, version, dependency,
+def create(hdrsize, load_slot, download_slot, version, dependency,
            endian, signkey, encrkey, test_image, infile, outfile):
     signkey = load_key(signkey)
-    print("STS", dependency[0], len(dependency))
-    dependency += (destination_slot, ('0.0.0'), (version)),
-    print("STS", dependency)
     if signkey is not None:
         encrkey = load_key(encrkey) if encrkey else None
-        #img = image.Image(hdrsize = hdrsize, load_address = load_address,
-        #                  dest_slot = destination_slot,
-        #                  version = decode_version(version),
-        #                  dep_slot = dependency[1],
-        #                  dep_min_ver = decode_version(dependency[2]),
-        #                  dep_max_ver = decode_version(dependency[3]),
-        #                  endian = endian,
-        #                  type = type)
-        #img.load(infile)
-        #img.create(signkey, encrkey)
-        #img.save(outfile)
+        img = image.Image(hdrsize = hdrsize, load_slot = load_slot,
+                          download_slot = download_slot,
+                          version = decode_version(version),
+                          endian = endian,
+                          type = type)
+        img.load(infile)
+        img.create(signkey, encrkey)
+        img.save(outfile)
 
         if test_image:
-            print("const unsigned char {}[{}] = {{".format(test_image, len(img.payload)),end = '')
+            print("const unsigned char {}[{}] = {{".format(test_image, len(img.payload)), end = '')
             for count, b in enumerate(img.payload):
                 if count % 8 == 0:
                     print("\n" + "\t", end='')

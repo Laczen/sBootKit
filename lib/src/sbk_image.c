@@ -154,30 +154,18 @@ end:
         return rc;
 }
 
-int sbk_image_hash_verify(const struct sbk_os_slot *slot,
-                          const struct sbk_image_state *state,
-                          int (*read_cb)(const void *ctx, uint32_t offset,
-                                         void *data, uint32_t len),
-                          const void *read_cb_ctx)
+int sbk_image_digest_verify(const uint8_t *digest,
+                            int (*read_cb)(const void *ctx, uint32_t offset,
+                                           void *data, uint32_t len),
+                            const void *read_cb_ctx, uint32_t image_size)
 {
-        struct sbk_image_hash hash;
-        int rc;
-
-        rc = sbk_image_get_tag_data(slot, state->hash_tag, &hash, sizeof(hash));
-        if (rc != 0) {
-                LOG_DBG("HASH not found");
-                goto end;
-        }
-
-        struct sbk_crypto_se hash_se = {
-                .data = &hash.digest,
+        struct sbk_crypto_se digest_se = {
+                .data = digest,
         };
 
         /* verify the hash */
-        return sbk_crypto_hash_verify(&hash_se, read_cb, read_cb_ctx,
-                                      state->size);
-end:
-        return rc;
+        return sbk_crypto_digest_verify(&digest_se, read_cb, read_cb_ctx,
+                                        image_size);
 }
 
 struct read_cb_ctx {
@@ -211,8 +199,8 @@ int sbk_image_seal_verify(const struct sbk_os_slot *slot)
         struct sbk_crypto_se seal_se = {
                 .data = &seal.seal,
         };
-        struct sbk_crypto_se hash_se = {
-                .data = sbk_crypto_hash_from_seal(&seal_se),
+        struct sbk_crypto_se digest_se = {
+                .data = sbk_crypto_digest_from_seal(&seal_se),
         };
         uint32_t pos = 0U;
 
@@ -221,7 +209,7 @@ int sbk_image_seal_verify(const struct sbk_os_slot *slot)
                 goto end;
         }
 
-        rc = sbk_crypto_hash_verify(&hash_se, read_cb, (void *)&cb_ctx, pos);
+        rc = sbk_crypto_digest_verify(&digest_se, read_cb, (void *)&cb_ctx, pos);
         if (rc != 0) {
                 LOG_DBG("MESSAGE hash error");
                 goto end;
@@ -404,12 +392,21 @@ int sbk_image_bootable(uint16_t slot_no, uint32_t *address)
                 goto end;
         }
 
+        struct sbk_image_hash hash;
+
+        rc = sbk_image_get_tag_data(&slot, state.hash_tag, &hash, sizeof(hash));
+        if (rc != 0) {
+                LOG_DBG("HASH not found");
+                goto end;
+        }
+
         const struct read_cb_ctx cb_ctx = {
                 .slot = &slot,
                 .offset = state.offset,
         };
+        const uint8_t *dig = (const uint8_t *)&hash.digest;
 
-        rc = sbk_image_hash_verify(&slot, &state, read_cb, (void *)&cb_ctx);
+        rc = sbk_image_digest_verify(dig, read_cb, (void *)&cb_ctx, state.size);
         if (rc != 0) {
                 goto end;
         }

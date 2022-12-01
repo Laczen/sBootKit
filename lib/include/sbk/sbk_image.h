@@ -127,23 +127,21 @@ int sbk_image_get_state(const struct sbk_os_slot *slot, uint32_t cnt,
 int sbk_image_seal_verify(const struct sbk_os_slot *slot);
 
 /**
- * @brief sbk_image_hash_verify
+ * @brief sbk_image_digest_verify
  *
- * Verify the hash of an image
+ * Verify the digest of an image
  *
- * @param slot: slot where the image is located
- * @param state: image state
+ * @param digest: pointer to the image digest
  * @param read_cb: read callback function
  * @param read_cb_ctx: read callback context
  * @retval -ERRNO errno code if error
  * @retval 0 if succesfull
  *
  */
-int sbk_image_hash_verify(const struct sbk_os_slot *slot,
-                          const struct sbk_image_state *state,
-                          int (*read_cb)(const void *ctx, uint32_t offset,
-                                         void *data, uint32_t len),
-                          const void *read_cb_ctx);
+int sbk_image_digest_verify(const uint8_t *digest,
+                            int (*read_cb)(const void *ctx, uint32_t offset,
+                                           void *data, uint32_t len),
+                            const void *read_cb_ctx, uint32_t image_size);
 
 /**
  * @brief sbk_image_get_tag_data

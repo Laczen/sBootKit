@@ -52,26 +52,17 @@ end:
         return rc;
 }
 
-uint8_t *sbk_crypto_hash_from_seal(const struct sbk_crypto_se *seal_se)
+const uint8_t *sbk_crypto_digest_from_seal(const struct sbk_crypto_se *seal_se)
 {
-        uint8_t *ret;
+        uint8_t *ret = (uint8_t *)seal_se->data;
 
-        ret = seal_se->data;
         ret += SBK_CRYPTO_FW_SEAL_PUBKEY_SIZE;
         ret += SBK_CRYPTO_FW_SEAL_SIGNATURE_SIZE;
         return ret;
 }
 
-uint8_t *sbk_crypto_pkey_from_seal(const struct sbk_crypto_se *seal_se)
-{
-        uint8_t *ret;
-
-        ret = seal_se->data;
-        return ret;
-}
-
 int sbk_crypto_seal_pkey_verify(const struct sbk_crypto_se *seal_se,
-                                uint8_t *pkey)
+                                const uint8_t *pkey)
 {
         if (memcmp(seal_se->data, pkey, SBK_CRYPTO_FW_SEAL_PUBKEY_SIZE) != 0) {
                 return -SBK_EC_EFAULT;
@@ -82,16 +73,16 @@ int sbk_crypto_seal_pkey_verify(const struct sbk_crypto_se *seal_se,
 #endif /* CONFIG_SBK_TINYCRYPT */
 
 #ifdef CONFIG_SBK_TINYCRYPT
-int sbk_crypto_hash_verify(const struct sbk_crypto_se *hash_se,
-                           int (*read_cb)(const void *ctx, uint32_t offset,
-                                          void *data, uint32_t len),
-                           const void *read_cb_ctx, uint32_t len)
+int sbk_crypto_digest_verify(const struct sbk_crypto_se *digest_se,
+                             int (*read_cb)(const void *ctx, uint32_t offset,
+                                            void *data, uint32_t len),
+                             const void *read_cb_ctx, uint32_t len)
 {
-        if (!sbk_crypto_se_valid(hash_se)) {
+        if (!sbk_crypto_se_valid(digest_se)) {
                 return -SBK_EC_EFAULT;
         }
 
-        const uint8_t *hash = (const uint8_t *)hash_se->data;
+        const uint8_t *digest = (const uint8_t *)digest_se->data;
         struct tc_sha256_state_struct s;
         uint8_t buf[SBK_CRYPTO_FW_HASH_SIZE];
         uint32_t offset = 0U;
@@ -123,7 +114,7 @@ int sbk_crypto_hash_verify(const struct sbk_crypto_se *hash_se,
                 goto end;
         }
 
-        if (memcmp(hash, buf, SBK_CRYPTO_FW_HASH_SIZE) != 0) {
+        if (memcmp(digest, buf, SBK_CRYPTO_FW_HASH_SIZE) != 0) {
                 rc = -SBK_EC_EFAULT;
         }
 

@@ -31,7 +31,6 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 
 BYTE_ALIGNMENT = 32 # Output hex file is aligned to BYTE_ALIGNMENT
-MIN_HDRSIZE = 512
 SBK_IMAGE_META_START_TAG = 0x8000
 SBK_IMAGE_META_SEAL_TAG = 0x7FFF
 SBK_IMAGE_STATE_BOOTABLE = 0x0080
@@ -47,11 +46,12 @@ STRUCT_ENDIAN_DICT = {
 }
 
 class Image():
-    def __init__(self, hdrsize = None, load_slot = None, download_slot = None,
-                 version = 0, endian='little', type = 'image',
+    def __init__(self, hdrsize = None, run_slot = None, download_slot = None,
+                 version = 0, endian='little', type = 'image', offset = None,
                  dep_slot = None, dep_min_ver = None, dep_max_ver = None):
         self.hdrsize = hdrsize
-        self.load_slot = load_slot
+        self.offset = offset
+        self.run_slot = run_slot
         self.download_slot = download_slot
         self.version = version or versmod.decode_version("0")
         self.endian = endian
@@ -63,11 +63,11 @@ class Image():
         self.meta_cnt = 0;
 
     def __repr__(self):
-        return "<hdrsize={}, load_slot={}, dest_slot={}, \
+        return "<hdrsize={}, run_slot={}, download_slot={}, \
                 Image version={}, endian={}, type={} format={}, \
                 payloadlen=0x{:x}>".format(
                     self.hdrsize,
-                    self.load_slot,
+                    self.run_slot,
                     self.download_slot,
                     self.version,
                     self.endian,
@@ -89,32 +89,26 @@ class Image():
     def load(self, path):
         """Load an image from a given file"""
         ext = os.path.splitext(path)[1][1:].lower()
-
         if ext != INTEL_HEX_EXT:
             raise Exception("Only hex input file supported")
+
         ih = IntelHex(path)
         self.payload = ih.tobinarray()
+        if self.offset is None:
+            self.offset = ih.minaddr();
 
         # Padding the payload to aligned size
         if (len(self.payload) % BYTE_ALIGNMENT) != 0:
             padding = BYTE_ALIGNMENT - len(self.payload) % BYTE_ALIGNMENT
             self.payload = bytes(self.payload) + (b'\xff' * padding)
 
-        if self.hdrsize == None:
-            self.payload = (b'\x00' * MIN_HDRSIZE) + bytes(self.payload)
-            self.hdrsize = MIN_HDRSIZE
-            self.run_address = ih.minaddr()
-        else:
-            self.run_address = ih.minaddr() + self.hdrsize
+        if self.run_slot == None:
+            self.run_slot = 0;
 
         if self.download_slot == None:
             self.download_slot = 0;
 
-        if self.load_slot == None:
-            self.load_slot = 0;
-
         self.size = len(self.payload) - self.hdrsize;
-
         self.check()
 
     def save(self, path):
@@ -125,7 +119,7 @@ class Image():
             raise Exception("Only hex input file supported")
 
         h = IntelHex()
-        h.frombytes(bytes=self.payload)
+        h.frombytes(bytes=self.payload, offset = self.offset)
         h.tofile(path, 'hex')
 
     def check(self):
@@ -134,7 +128,6 @@ class Image():
         if any(v != 0x00 for v in self.payload[0:self.hdrsize]):
             raise Exception("Header size provided, but image does not \
             start with 0x00")
-
 
     def create(self, signkey, encrkey):
 
@@ -215,7 +208,7 @@ class Image():
             image_dep_tag, struct.calcsize(image_dep_fmt),
             0,0,0,
             self.version.major or 0, self.version.minor or 0, self.version.revision or 0,
-            self.load_slot,
+            self.run_slot,
             0
         )
 
@@ -231,7 +224,7 @@ class Image():
         )
         hdr += struct.pack(image_state_fmt,
             image_state_tag[0], struct.calcsize(image_state_fmt),
-            self.load_slot,
+            self.run_slot,
             self.hdrsize,
             len(self.payload) - self.hdrsize,
             SBK_IMAGE_STATE_BOOTABLE,

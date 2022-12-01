@@ -19,13 +19,13 @@ uint8_t test_msg[] = {
 };
 uint8_t test_msg_bytes = sizeof(test_msg);
 
-uint8_t test_msg_hash[] = {
+uint8_t test_msg_digest[] = {
 	87, 43, 26, 198, 187, 148, 71, 79,
 	220, 38, 223, 89, 4, 118, 115, 109,
 	231, 185, 12, 231, 123, 212, 221, 103,
 	117, 243, 241, 37, 134, 175, 136, 251
 };
-uint8_t test_msg_hash_bytes = sizeof(test_msg_hash);
+uint8_t test_msg_digest_bytes = sizeof(test_msg_digest);
 
 uint8_t test_signature[] = {
 	252, 86, 17, 53, 85, 142, 204, 211,

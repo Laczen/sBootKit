@@ -9,14 +9,14 @@
 #include <zephyr/ztest.h>
 #include "sbk/sbk_crypto.h"
 
-struct hash_rd_ctx {
+struct digest_rd_ctx {
         uint8_t *buffer;
         uint32_t buffer_size;
 };
 
-int hash_read(const void *ctx, uint32_t offset, void *data, uint32_t len)
+int digest_read(const void *ctx, uint32_t offset, void *data, uint32_t len)
 {
-        struct hash_rd_ctx *rd_ctx = (struct hash_rd_ctx *)ctx;
+        struct digest_rd_ctx *rd_ctx = (struct digest_rd_ctx *)ctx;
 
         if ((offset + len) > rd_ctx->buffer_size) {
                 return -1;
@@ -30,26 +30,26 @@ ZTEST_SUITE(sbk_crypto_tests, NULL, NULL, NULL, NULL, NULL);
 
 extern uint8_t test_msg[];
 extern uint8_t test_msg_bytes;
-extern uint8_t test_msg_hash[];
-extern uint8_t test_msg_hash_bytes;
+extern uint8_t test_msg_digest[];
+extern uint8_t test_msg_digest_bytes;
 
 /**
- * @brief Test hash calculation for data in flash
+ * @brief Test digest calculation
  */
-ZTEST(sbk_crypto_tests, sbk_hash)
+ZTEST(sbk_crypto_tests, sbk_digest)
 {
         int err;
-        struct hash_rd_ctx ctx = {
+        struct digest_rd_ctx ctx = {
                 .buffer = test_msg,
                 .buffer_size = SBK_CRYPTO_FW_HASH_SIZE,
         };
-	struct sbk_crypto_se hash_se = {
-		.data = test_msg_hash,
+	struct sbk_crypto_se digest_se = {
+		.data = test_msg_digest,
 	};
 
-	err = sbk_crypto_hash_verify(&hash_se, &hash_read, (void *)&ctx,
-                		     test_msg_bytes);
-	zassert_true(err == 0, "Hash differs");
+	err = sbk_crypto_digest_verify(&digest_se, &digest_read, (void *)&ctx,
+                		       test_msg_bytes);
+	zassert_true(err == 0, "Digest differs");
 }
 
 extern uint8_t test_signature[];
@@ -72,19 +72,19 @@ ZTEST(sbk_crypto_tests, sbk_sign_verify)
 	slptr += SBK_CRYPTO_FW_SEAL_PUBKEY_SIZE;
 	memcpy(slptr, &test_signature[0], SBK_CRYPTO_FW_SEAL_SIGNATURE_SIZE);
 	slptr += SBK_CRYPTO_FW_SEAL_SIGNATURE_SIZE;
-	memcpy(slptr, &test_msg_hash[0], SBK_CRYPTO_FW_SEAL_MESSAGE_SIZE);
+	memcpy(slptr, &test_msg_digest[0], SBK_CRYPTO_FW_SEAL_MESSAGE_SIZE);
 	err = sbk_crypto_seal_verify(&seal_se);
 	zassert_true(err == 0, "Signature validation failed: [err %d]", err);
 
-	/* modify the key */
-	tmp = test_msg_hash[0];
-	test_msg_hash[0] >>=1;
-	memcpy(slptr, &test_msg_hash[0], SBK_CRYPTO_FW_SEAL_MESSAGE_SIZE);
+	/* modify the message digest */
+	tmp = test_msg_digest[0];
+	test_msg_digest[0] >>=1;
+	memcpy(slptr, &test_msg_digest[0], SBK_CRYPTO_FW_SEAL_MESSAGE_SIZE);
 	err = sbk_crypto_seal_verify(&seal_se);
 	zassert_false(err == 0, "Invalid hash generates valid signature");
 
-	/* reset the key */
-	test_msg_hash[0] = tmp;
+	/* reset the message digest */
+	test_msg_digest[0] = tmp;
 }
 
 extern uint8_t test_enc_pubkey[];

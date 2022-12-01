@@ -97,24 +97,16 @@ def validate_version(ctx, param, value):
     except ValueError as e:
         raise click.BadParameter("{}".format(e))
 
-def validate_dependency(ctx, param, value):
+def validate_board_or_dependency(ctx, param, value):
     try:
         for entry in value:
+            print(str(entry[0]) + ":" + entry[1] + "-" + entry[2])
             decode_version(entry[1])
             decode_version(entry[2])
 
         return value
     except ValueError as e:
         raise click.BadParameter("{}".format(e))
-
-def validate_hdrsize(ctx, param, value):
-    if value == None:
-        return None
-    min_io = image.MIN_HDRSIZE
-    if (value!= 0) and (value < min_io):
-        raise click.BadParameter(
-            "Minimum value for -hs/--hdrsize is {} or 0".format(min_io))
-    return value
 
 class BasedIntParamType(click.ParamType):
     name = 'integer'
@@ -133,37 +125,41 @@ class BasedIntParamType(click.ParamType):
 @click.argument('infile')
 @click.option('-e', '--endian', type = click.Choice(['little', 'big']),
               default = 'little', help = 'Select little or big endian')
-@click.option('-hs', '--hdrsize', callback = validate_hdrsize,
-              type = BasedIntParamType(),
+@click.option('-hs', '--hdrsize', required = True, type = BasedIntParamType(),
               help = 'Size of the header that was prepended during image \
-generation')
-@click.option('-ls','--load-slot', type = BasedIntParamType(),
+                      generation')
+@click.option('-rs','--run-slot', type = BasedIntParamType(),
               help = 'Slot number where the image should be run from')
 @click.option('-ds','--download-slot', type = BasedIntParamType(),
-              help = 'Slot number where the image should be downloaded')
+              help = 'Slot number where the image should be downloaded to')
 @click.option('-v', '--version', callback = validate_version, type = str)
+@click.option('-o', '--offset', type = BasedIntParamType(),
+              help = 'When specified moves the image to start at offset')
+@click.option('-brd','--board', multiple=True,
+              type = (BasedIntParamType(), str, str),
+              callback = validate_board_or_dependency,
+              help = 'Board dependency, board id and version range')
+@click.option('-dep','--dependency', multiple=True,
+              type = (BasedIntParamType(), str, str),
+              callback = validate_board_or_dependency,
+              help = 'Image dependency, image at slot in version range')
 @click.option('-sk','--signkey', metavar = 'filename',
               help = 'Sign image using the provided sign key')
 @click.option('-ek','--encrkey', metavar = 'filename',
               help = 'Encrypt image using the provided encrypt key')
-@click.option('-dep','--dependency', multiple=True,
-              type = (BasedIntParamType(), str, str),
-              callback = validate_dependency,
-              help = 'Image dependency, image at slot in version range')
 @click.option('-tst', '--test-image',
               help = 'generate test image as c file')
 @click.command(help='''Create a image for use with sBootKit\n
                INFILE and OUTFILE are of type hex''')
-def create(hdrsize, load_slot, download_slot, version, dependency,
-           endian, signkey, encrkey, test_image, infile, outfile):
+def create(endian, hdrsize, offset, run_slot, download_slot, version, board,
+           dependency, signkey, encrkey, test_image, infile, outfile):
     signkey = load_key(signkey)
     if signkey is not None:
         encrkey = load_key(encrkey) if encrkey else None
-        img = image.Image(hdrsize = hdrsize, load_slot = load_slot,
-                          download_slot = download_slot,
+        img = image.Image(hdrsize = hdrsize, offset = offset,
+                          run_slot = run_slot, download_slot = download_slot,
                           version = decode_version(version),
-                          endian = endian,
-                          type = type)
+                          endian = endian, type = type)
         img.load(infile)
         img.create(signkey, encrkey)
         img.save(outfile)

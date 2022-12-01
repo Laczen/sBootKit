@@ -122,6 +122,8 @@ struct sbk_shared_data shared_data Z_GENERIC_SECTION(BL_SHARED_SRAM);
 
 void main(void)
 {
+        LOG_DBG("Welcome...");
+
         if ((shared_data.brd_id != BOARD_ID) ||
             (shared_data.bcnt > BOOT_RETRIES) ||
             (shared_data.bslot >= ARRAY_SIZE(slots))) {

@@ -14,13 +14,13 @@
 
 #include "sbk/sbk_os.h"
 #include "sbk/sbk_util.h"
-#include "sbk/sbk_board.h"
+#include "sbk/sbk_product.h"
 #include "sbk/sbk_image.h"
 
-#define BOARD_ID 0xAABBCCDD
-#define BOARD_VER_MAJ 0
-#define BOARD_VER_MIN 0
-#define BOARD_VER_REV 0
+#define PRODUCT_HASH 0xAABBCCDD
+#define PRODUCT_VER_MAJ 0
+#define PRODUCT_VER_MIN 0
+#define PRODUCT_VER_REV 0
 
 #define FLASH_OFFSET CONFIG_FLASH_BASE_ADDRESS
 
@@ -47,8 +47,8 @@
  */
 
 struct sbk_shared_data {
-        uint32_t brd_id;
-        struct sbk_version brd_ver;
+        uint32_t product_hash;
+        struct sbk_version product_ver;
         uint8_t bslot;
         uint8_t bcnt;
 };
@@ -117,6 +117,7 @@ static int slot_init(struct sbk_os_slot *slot, uint32_t slot_no)
 }
 
 int (*sbk_os_slot_init)(struct sbk_os_slot *slot, uint32_t slot_no) = slot_init;
+int (*sbk_os_feed_watchdog)(void) = NULL;
 extern void jump_image(uint32_t address);
 struct sbk_shared_data shared_data Z_GENERIC_SECTION(BL_SHARED_SRAM);
 
@@ -124,19 +125,23 @@ void main(void)
 {
         LOG_DBG("Welcome...");
 
-        if ((shared_data.brd_id != BOARD_ID) ||
+        if (sbk_os_feed_watchdog != NULL) {
+                (void)sbk_os_feed_watchdog();
+        }
+
+        if ((shared_data.product_hash != PRODUCT_HASH) ||
             (shared_data.bcnt > BOOT_RETRIES) ||
             (shared_data.bslot >= ARRAY_SIZE(slots))) {
-                shared_data.brd_id = BOARD_ID;
-                shared_data.brd_ver.major = BOARD_VER_MAJ;
-                shared_data.brd_ver.minor = BOARD_VER_MIN;
-                shared_data.brd_ver.revision = BOARD_VER_REV;
+                shared_data.product_hash = PRODUCT_HASH;
+                shared_data.product_ver.major = PRODUCT_VER_MAJ;
+                shared_data.product_ver.minor = PRODUCT_VER_MIN;
+                shared_data.product_ver.revision = PRODUCT_VER_REV;
                 shared_data.bslot = ARRAY_SIZE(slots) - 1U;
                 shared_data.bcnt = 0U;
         }
 
-        sbk_init_board_id(&shared_data.brd_id);
-        sbk_init_board_version(&shared_data.brd_ver);
+        sbk_product_init_hash(&shared_data.product_hash);
+        sbk_product_init_version(&shared_data.product_ver);
 
         if (shared_data.bcnt == BOOT_RETRIES) {
                 shared_data.bslot++;

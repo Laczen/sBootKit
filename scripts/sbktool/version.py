@@ -41,6 +41,25 @@ def decode_version(text):
         msg += "parts optional"
         raise ValueError(msg)
 
+def decode_max_version(text):
+    """Decode the version string, which should be of the form maj.min.rev
+    """
+    if text is None:
+        text = 255
+    m = version_re.match(text)
+    if m:
+        result = SemiSemVersion(
+                int(m.group(1)) if m.group(1) else 255,
+                int(m.group(3)) if m.group(3) else 255,
+                int(m.group(5)) if m.group(5) else 65535)
+        return result
+    else:
+        msg = "Invalid version number, should be maj.min.rev with later "
+        msg += "parts optional"
+        raise ValueError(msg)
+
+def decode_min_version(text):
+    return decode_version(text)
 
 if __name__ == '__main__':
     print(decode_version("1.2"))

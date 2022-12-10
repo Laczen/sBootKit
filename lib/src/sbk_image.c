@@ -3,7 +3,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#include "sbk/sbk_board.h"
+#include "sbk/sbk_product.h"
 #include "sbk/sbk_image.h"
 
 #include <string.h>
@@ -12,7 +12,7 @@
 #include "sbk/sbk_os.h"
 #include "sbk/sbk_crypto.h"
 
-struct __attribute__((packed)) sbk_image_hash {
+struct __attribute__((packed)) sbk_image_digest {
         struct sbk_image_meta_rec_hdr rec_hdr;
         uint16_t type;
         uint16_t pad16;
@@ -244,7 +244,7 @@ end:
         return rc;
 }
 
-int sbk_image_board_verify(const struct sbk_os_slot *slot)
+int sbk_image_product_verify(const struct sbk_os_slot *slot)
 {
         const uint16_t tag = SBK_IMAGE_START_TAG;
         struct sbk_image_meta_start start;
@@ -258,10 +258,11 @@ int sbk_image_board_verify(const struct sbk_os_slot *slot)
 
         dep_cnt = 0U;
         dep_match_cnt = 0U;
-        dep_tag = start.board_dep_tag;
+        dep_tag = start.product_dep_tag;
 
         while (true) {
-                struct sbk_board_dep_info info;
+                struct sbk_product_dep_info info;
+                uint32_t product_hash;
 
                 if (!sbk_image_tag_is_odd_parity(dep_tag)) {
                         break;
@@ -275,14 +276,14 @@ int sbk_image_board_verify(const struct sbk_os_slot *slot)
 
                 dep_cnt++;
                 dep_tag = info.next_tag;
-                uint32_t board_id = info.board_id;
+                product_hash = info.product_hash;
 
-                if (!sbk_board_id_match(&board_id)) {
+                if (!sbk_product_hash_match(&product_hash)) {
                         continue;
                 }
 
                 struct sbk_version_range range = info.vrange;
-                if (!sbk_board_version_in_range(&range)) {
+                if (!sbk_product_version_in_range(&range)) {
                         continue;
                 }
 
@@ -387,14 +388,15 @@ int sbk_image_bootable(uint16_t slot_no, uint32_t *address)
                 goto end;
         }
 
-        rc = sbk_image_board_verify(&slot);
+        rc = sbk_image_product_verify(&slot);
         if (rc != 0) {
                 goto end;
         }
 
-        struct sbk_image_hash hash;
+        struct sbk_image_digest image_digest;
 
-        rc = sbk_image_get_tag_data(&slot, state.hash_tag, &hash, sizeof(hash));
+        rc = sbk_image_get_tag_data(&slot, state.digest_tag, &image_digest,
+                                    sizeof(image_digest));
         if (rc != 0) {
                 LOG_DBG("HASH not found");
                 goto end;
@@ -404,7 +406,7 @@ int sbk_image_bootable(uint16_t slot_no, uint32_t *address)
                 .slot = &slot,
                 .offset = state.offset,
         };
-        const uint8_t *dig = (const uint8_t *)&hash.digest;
+        const uint8_t *dig = (const uint8_t *)&image_digest.digest;
 
         rc = sbk_image_digest_verify(dig, read_cb, (void *)&cb_ctx, state.size);
         if (rc != 0) {

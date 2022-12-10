@@ -27,36 +27,36 @@ struct __attribute__((packed)) sbk_image_meta_rec_hdr {
 };
 
 struct __attribute__((packed)) sbk_image_meta_start {
-        struct sbk_image_meta_rec_hdr rec_hdr; /* image start tag = 0x8000 */
+        struct sbk_image_meta_rec_hdr rec_hdr; /* record tag + length */
         struct sbk_version image_version;
         uint16_t image_dep_tag; /* first tag describing image dependency */
-        uint16_t board_dep_tag; /* first tag describing board dependency */
+        uint16_t product_dep_tag; /* first tag describing product dependency */
         uint16_t image_state_tag; /* first tag describing image state */
         uint16_t next_tag; /* set this to 0x7FFF */
 };
 
 struct __attribute__((packed)) sbk_image_dep_info {
-        struct sbk_image_meta_rec_hdr rec_hdr;
+        struct sbk_image_meta_rec_hdr rec_hdr; /* record tag + length */
         struct sbk_version_range vrange;
         uint16_t run_slot;
         uint16_t next_tag;
 };
 
-struct __attribute__((packed)) sbk_board_dep_info {
-        struct sbk_image_meta_rec_hdr rec_hdr;
-        uint32_t board_id;
+struct __attribute__((packed)) sbk_product_dep_info {
+        struct sbk_image_meta_rec_hdr rec_hdr; /* record tag + length */
         struct sbk_version_range vrange;
+        uint32_t product_hash;
         uint16_t next_tag;
         uint16_t pad16;
 };
 
 struct __attribute__((packed)) sbk_image_state {
-        struct sbk_image_meta_rec_hdr rec_hdr;
+        struct sbk_image_meta_rec_hdr rec_hdr; /* record tag + length */
         uint16_t slot;
         uint16_t offset;
         uint32_t size;
         uint16_t state_type;
-        uint16_t hash_tag;
+        uint16_t digest_tag;
         uint16_t transform_tag;
         uint16_t next_tag;
 };
@@ -64,15 +64,15 @@ struct __attribute__((packed)) sbk_image_state {
 struct sbk_os_slot;
 
 /**
- * @brief sbk_image_board_verify
+ * @brief sbk_image_product_verify
  *
- * Verifies that a image can run on the present board
+ * Verifies that a image can run on the present product
  *
  * @param slot: slot that contains the image
  * @retval -ERRNO errno code if error
  * @retval 0 if succesfull
  */
-int sbk_image_board_verify(const struct sbk_os_slot *slot);
+int sbk_image_product_verify(const struct sbk_os_slot *slot);
 
 /**
  * @brief sbk_image_dependency_verify

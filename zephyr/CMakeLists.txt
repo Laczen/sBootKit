@@ -32,7 +32,7 @@ zephyr_include_directories(
     ${ROOT_DIR}/lib/include
 )
 zephyr_library_sources(
-    ${SBOOTKIT_DIR}/src/sbk_board.c
+    ${SBOOTKIT_DIR}/src/sbk_product.c
     ${SBOOTKIT_DIR}/src/sbk_crypto.c
     ${SBOOTKIT_DIR}/src/sbk_image.c
     ${SBOOTKIT_DIR}/src/sbk_os.c

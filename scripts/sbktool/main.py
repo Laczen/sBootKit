@@ -97,17 +97,66 @@ def validate_version(ctx, param, value):
     except ValueError as e:
         raise click.BadParameter("{}".format(e))
 
-def validate_board_or_dependency(ctx, param, value):
-    try:
-        for entry in value:
-            print(str(entry[0]) + ":" + entry[1] + "-" + entry[2])
-            decode_version(entry[1])
-            decode_version(entry[2])
+def validate_version_range(value):
+    rv = []
+    range = value.split("-", 1)
+    if not range[0]:
+        range[0] = "0.0.0"
+    if not range[1]:
+        range[1] = "255.255.65535"
+    for version in range:
+        try:
+            rv.append(decode_version(version))
+        except ValueError as e:
+            raise ValueError(e)
+    return rv
 
-        return value
-    except ValueError as e:
-        raise click.BadParameter("{}".format(e))
+def djb2_hash(s):
+    hash = 5381
+    for x in s:
+        # ord(x) simply returns the unicode rep of the
+        # character x
+        hash = (( hash << 5) + hash) + ord(x)
+        hash = hash & 0xFFFFFFFF
+    return hash
 
+def convert_product_dep(ctx, param, value):
+    # a product is specified as: "product:min_ver-max_ver"
+    rv = []
+    for entry in value:
+        [product, range] = entry.split(":", 1)
+        product_hash = djb2_hash(product)
+        try:
+            range = validate_version_range(range)
+        except ValueError as e:
+            raise click.BadParameter("Bad range {}".format(e))
+
+        rv.append((product_hash, range))
+
+    return rv
+
+def convert_image_dep(ctx, param, value):
+    # a image is specified as: "slot:min_ver-max_ver"
+    rv = []
+    for entry in value:
+        [slot, range] = entry.split(":", 1)
+        try:
+            if slot[:2].lower() == '0x':
+                slot = int(slot[2:], 16)
+            elif slot[:1] == '0':
+                slot = int(slot, 8)
+            slot = int(slot, 10)
+        except ValueError:
+            raise click.BadParameter("slot is not a valid integer")
+
+        try:
+            range = validate_version_range(range)
+        except ValueError as e:
+            raise click.BadParameter("Bad range {}".format(e))
+
+        rv.append((slot, range))
+
+    return rv
 class BasedIntParamType(click.ParamType):
     name = 'integer'
 
@@ -135,14 +184,12 @@ class BasedIntParamType(click.ParamType):
 @click.option('-v', '--version', callback = validate_version, type = str)
 @click.option('-o', '--offset', type = BasedIntParamType(),
               help = 'When specified moves the image to start at offset')
-@click.option('-brd','--board', multiple=True,
-              type = (BasedIntParamType(), str, str),
-              callback = validate_board_or_dependency,
-              help = 'Board dependency, board id and version range')
-@click.option('-dep','--dependency', multiple=True,
-              type = (BasedIntParamType(), str, str),
-              callback = validate_board_or_dependency,
-              help = 'Image dependency, image at slot in version range')
+@click.option('-prd','--product', multiple=True, type = str,
+              callback = convert_product_dep,
+              help = 'Product dependency, productname:version range')
+@click.option('-dep','--dependency', multiple=True, type = str,
+              callback = convert_image_dep,
+              help = 'Image dependency, image slot:version range')
 @click.option('-sk','--signkey', metavar = 'filename',
               help = 'Sign image using the provided sign key')
 @click.option('-ek','--encrkey', metavar = 'filename',
@@ -151,7 +198,7 @@ class BasedIntParamType(click.ParamType):
               help = 'generate test image as c file')
 @click.command(help='''Create a image for use with sBootKit\n
                INFILE and OUTFILE are of type hex''')
-def create(endian, hdrsize, offset, run_slot, download_slot, version, board,
+def create(endian, hdrsize, offset, run_slot, download_slot, version, product,
            dependency, signkey, encrkey, test_image, infile, outfile):
     signkey = load_key(signkey)
     if signkey is not None:
@@ -159,6 +206,7 @@ def create(endian, hdrsize, offset, run_slot, download_slot, version, board,
         img = image.Image(hdrsize = hdrsize, offset = offset,
                           run_slot = run_slot, download_slot = download_slot,
                           version = decode_version(version),
+                          product_dep = product, image_dep = dependency,
                           endian = endian, type = type)
         img.load(infile)
         img.create(signkey, encrkey)

@@ -8,14 +8,14 @@
 
 #include <zephyr/ztest.h>
 
-#include "sbk/sbk_board.h"
+#include "sbk/sbk_product.h"
 #include "sbk/sbk_image.h"
 #include "sbk/sbk_os.h"
 
 #include "testimage0.h"
 
-uint32_t board_id = 0xAABBCCDD;
-struct sbk_version board_version = {
+uint32_t product_hash = 0xAABBCCDD;
+struct sbk_version product_version = {
         .major = 0,
         .minor = 0,
         .revision = 0,
@@ -24,7 +24,7 @@ struct sbk_version board_version = {
 struct {
         struct sbk_image_meta_start image_meta_start;
         struct sbk_image_dep_info image_dep_info;
-        struct sbk_board_dep_info board_dep_info;
+        struct sbk_product_dep_info product_dep_info;
         struct sbk_image_state image_state;
 } image = {
         .image_meta_start = {
@@ -33,7 +33,7 @@ struct {
                         .len = sizeof(struct sbk_image_meta_start),
                 },
                 .image_dep_tag = 0x0001,
-                .board_dep_tag = 0x0002,
+                .product_dep_tag = 0x0002,
                 .image_state_tag = 0x8003,
                 .next_tag = 0x7FFF,
         },
@@ -43,12 +43,12 @@ struct {
                         .len = sizeof(struct sbk_image_dep_info),
                 },
         },
-        .board_dep_info = {
+        .product_dep_info = {
                 .rec_hdr = {
                         .tag = 0x0002,
-                        .len = sizeof(struct sbk_board_dep_info),
+                        .len = sizeof(struct sbk_product_dep_info),
                 },
-                .board_id = 0xAABBCCDD,
+                .product_hash = 0xAABBCCDD,
         },
         .image_state = {
                 .rec_hdr = {
@@ -68,12 +68,12 @@ ZTEST(sbk_image_tests, sbk_image_get_tag)
         struct sbk_os_slot slot;
         struct sbk_image_meta_start start;
         struct sbk_image_dep_info img_dep_info;
-        struct sbk_board_dep_info brd_dep_info;
+        struct sbk_product_dep_info prd_dep_info;
         struct sbk_image_state img_state;
         int err;
 
-        sbk_init_board_id(&board_id);
-        sbk_init_board_version(&board_version);
+        sbk_product_init_hash(&product_hash);
+        sbk_product_init_version(&product_version);
 
         err = sbk_os_slot_open(&slot, 0);
         zassert_true(err == 0, "Failed slot open: [err %d]", err);
@@ -93,12 +93,12 @@ ZTEST(sbk_image_tests, sbk_image_get_tag)
                      sizeof(img_dep_info));
         zassert_true(err == 0, "Image dep info tag contaings wrong value");
 
-        err = sbk_image_get_tag_data(&slot, 0x0002, &brd_dep_info,
-                                     sizeof(brd_dep_info));
-        zassert_true(err == 0, "Failed getting board_dep_info: [err %d]", err);
-        err = memcmp(&brd_dep_info, &image.board_dep_info,
-                     sizeof(brd_dep_info));
-        zassert_true(err == 0, "Board dep info tag contaings wrong value");
+        err = sbk_image_get_tag_data(&slot, 0x0002, &prd_dep_info,
+                                     sizeof(prd_dep_info));
+        zassert_true(err == 0, "Failed getting product_dep_info: [err %d]", err);
+        err = memcmp(&prd_dep_info, &image.product_dep_info,
+                     sizeof(prd_dep_info));
+        zassert_true(err == 0, "Product dep info tag contaings wrong value");
 
         err = sbk_image_get_tag_data(&slot, 0x8003, &img_state,
                                      sizeof(img_state));
@@ -117,13 +117,13 @@ ZTEST(sbk_image_tests, sbk_image_get_tag)
 /*
  * @brief
  */
-ZTEST(sbk_image_tests, sbk_board_dependency)
+ZTEST(sbk_image_tests, sbk_product_dependency)
 {
         struct sbk_os_slot slot;
         int err;
 
-        sbk_init_board_id(&board_id);
-        sbk_init_board_version(&board_version);
+        sbk_product_init_hash(&product_hash);
+        sbk_product_init_version(&product_version);
 
         err = sbk_os_slot_open(&slot, 0);
         zassert_true(err == 0, "Failed slot open: [err %d]", err);
@@ -131,34 +131,34 @@ ZTEST(sbk_image_tests, sbk_board_dependency)
         err = sbk_os_slot_prog(&slot, 0U, &image, sizeof(image));
         zassert_true(err == 0, "Failed slot program: [err %d]", err);
 
-        err = sbk_image_board_verify(&slot);
+        err = sbk_image_product_verify(&slot);
         zassert_true(err == 0, "Failed board verify: [err %d]", err);
 
         /* set a unsupported board id */
-        image.board_dep_info.board_id = board_id + 1U;
+        image.product_dep_info.product_hash = product_hash + 1U;
 
         err = sbk_os_slot_prog(&slot, 0U, &image, sizeof(image));
         zassert_true(err == 0, "Failed slot program: [err %d]", err);
 
-        err = sbk_image_board_verify(&slot);
+        err = sbk_image_product_verify(&slot);
         zassert_false(err == 0, "Verify succeeded on bad board: [err %d]", err);
 
         /* reset the board id */
-        image.board_dep_info.board_id = board_id;
+        image.product_dep_info.product_hash = product_hash;
 
         /* set a unsupported board range*/
-        image.board_dep_info.vrange.min_version.major = 1U;
-        image.board_dep_info.vrange.max_version.major = 1U;
+        image.product_dep_info.vrange.min_version.major = 1U;
+        image.product_dep_info.vrange.max_version.major = 1U;
 
         err = sbk_os_slot_prog(&slot, 0U, &image, sizeof(image));
         zassert_true(err == 0, "Failed slot program: [err %d]", err);
 
-        err = sbk_image_board_verify(&slot);
+        err = sbk_image_product_verify(&slot);
         zassert_false(err == 0, "Verify succeeded on bad board version");
 
         /* reset the supported board range*/
-        image.board_dep_info.vrange.min_version.major = 0U;
-        image.board_dep_info.vrange.max_version.major = 0U;
+        image.product_dep_info.vrange.min_version.major = 0U;
+        image.product_dep_info.vrange.max_version.major = 0U;
 
         err = sbk_os_slot_close(&slot);
         zassert_true(err == 0, "Failed slot close: [err %d]", err);
@@ -172,8 +172,8 @@ ZTEST(sbk_image_tests, sbk_signed_image)
         struct sbk_os_slot slot;
         int err;
 
-        sbk_init_board_id(&board_id);
-        sbk_init_board_version(&board_version);
+        sbk_product_init_hash(&product_hash);
+        sbk_product_init_version(&product_version);
 
         err = sbk_os_slot_open(&slot, 0);
         zassert_true(err == 0, "Failed slot open: [err %d]", err);
@@ -181,7 +181,7 @@ ZTEST(sbk_image_tests, sbk_signed_image)
         err = sbk_os_slot_prog(&slot, 0U, &image_0, sizeof(image_0));
         zassert_true(err == 0, "Failed slot program: [err %d]", err);
 
-        err = sbk_image_board_verify(&slot);
+        err = sbk_image_product_verify(&slot);
         zassert_true(err == 0, "Failed board verify: [err %d]", err);
 
         err = sbk_image_seal_verify(&slot);
@@ -200,8 +200,8 @@ ZTEST(sbk_image_tests, sbk_bootable_image)
         uint32_t address;
         int err;
 
-        sbk_init_board_id(&board_id);
-        sbk_init_board_version(&board_version);
+        sbk_product_init_hash(&product_hash);
+        sbk_product_init_version(&product_version);
 
         err = sbk_os_slot_open(&slot, 0);
         zassert_true(err == 0, "Failed slot open: [err %d]", err);

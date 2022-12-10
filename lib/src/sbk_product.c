@@ -3,12 +3,12 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#include "sbk/sbk_board.h"
+#include "sbk/sbk_product.h"
 
 #include <string.h>
 
-uint32_t *board_id_ptr;
-struct sbk_version *board_version_ptr;
+uint32_t *product_hash_ptr;
+struct sbk_version *product_version_ptr;
 
 static uint32_t sbk_version_u32(const struct sbk_version *ver)
 {
@@ -33,40 +33,40 @@ bool sbk_version_in_range(const struct sbk_version *ver,
         return true;
 }
 
-const struct sbk_version *sbk_get_board_version(void)
+const struct sbk_version *sbk_product_get_version(void)
 {
-        return board_version_ptr;
+        return product_version_ptr;
 }
 
-const uint32_t *sbk_get_board_id(void)
+const uint32_t *sbk_product_get_hash(void)
 {
-        return board_id_ptr;
+        return product_hash_ptr;
 }
 
-bool sbk_board_id_match(const uint32_t *id)
+bool sbk_product_hash_match(const uint32_t *hash)
 {
-        if (board_id_ptr == NULL) {
+        if (product_hash_ptr == NULL) {
                 return false;
         }
 
-        return ((*id) == (*board_id_ptr));
+        return ((*hash) == (*product_hash_ptr));
 }
 
-bool sbk_board_version_in_range(const struct sbk_version_range *range)
+bool sbk_product_version_in_range(const struct sbk_version_range *range)
 {
-        if (board_version_ptr == NULL) {
+        if (product_version_ptr == NULL) {
                 return false;
         }
 
-        return sbk_version_in_range(board_version_ptr, range);
+        return sbk_version_in_range(product_version_ptr, range);
 }
 
-void sbk_init_board_id(const uint32_t *board_id)
+void sbk_product_init_hash(const uint32_t *hash)
 {
-        board_id_ptr = (uint32_t *)board_id;
+        product_hash_ptr = (uint32_t *)hash;
 }
 
-void sbk_init_board_version(const struct sbk_version *dev_version)
+void sbk_product_init_version(const struct sbk_version *dev_version)
 {
-        board_version_ptr = (struct sbk_version *)dev_version;
+        product_version_ptr = (struct sbk_version *)dev_version;
 }

@@ -56,6 +56,13 @@ struct sbk_os_slot {
  */
 extern int (*sbk_os_slot_init)(struct sbk_os_slot *slot, uint32_t slot_no);
 
+/** @brief sbk_os_feed_watchdog
+ *
+ * feed watchdog.
+ *
+ */
+extern int (*sbk_os_feed_watchdog)(void);
+
 /**
  * @brief Interface routines to read/write used by bootloader.
  *

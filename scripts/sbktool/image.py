@@ -48,19 +48,21 @@ STRUCT_ENDIAN_DICT = {
 class Image():
     def __init__(self, hdrsize = None, run_slot = None, download_slot = None,
                  version = 0, endian='little', type = 'image', offset = None,
-                 dep_slot = None, dep_min_ver = None, dep_max_ver = None):
+                 product_dep = None, image_dep = None):
         self.hdrsize = hdrsize
         self.offset = offset
-        self.run_slot = run_slot
+        self.run_slot = run_slot or 0
         self.download_slot = download_slot
         self.version = version or versmod.decode_version("0")
         self.endian = endian
         self.payload = []
         self.size = 0
-        self.dep_slot = dep_slot or None
-        self.dep_min_ver = dep_min_ver or versmod.decode_version("0")
-        self.dep_max_ver = dep_max_ver or versmod.decode_version("255.255.65535")
-        self.meta_cnt = 0;
+        self.product_dep = product_dep
+        self.image_dep = image_dep
+        self.image_dep.append(
+            (self.run_slot, (versmod.decode_version("0"), self.version))
+        )
+        self.meta_cnt = 0
 
     def __repr__(self):
         return "<hdrsize={}, run_slot={}, download_slot={}, \
@@ -175,8 +177,14 @@ class Image():
         """Install the image header."""
         e = STRUCT_ENDIAN_DICT[self.endian]
 
-        image_dep_tag = self.get_tag()
-        board_dep_tag = 0
+        image_dep_tag = []
+        for entry in self.image_dep:
+            image_dep_tag.append(self.get_tag())
+        image_dep_tag.append(0)
+        product_dep_tag = []
+        for entry in self.product_dep:
+            product_dep_tag.append(self.get_tag())
+        product_dep_tag.append(0)
         image_state_tag = [self.get_tag()]
         image_hash_tag = [self.get_tag()]
 
@@ -191,8 +199,8 @@ class Image():
         hdr = struct.pack(start_fmt,
             SBK_IMAGE_META_START_TAG, struct.calcsize(start_fmt),
             self.version.major or 0, self.version.minor or 0, self.version.revision or 0,
-            image_dep_tag,
-            board_dep_tag,
+            image_dep_tag[0],
+            product_dep_tag[0],
             image_state_tag[0],
             0x7FFF,
         )
@@ -204,13 +212,42 @@ class Image():
             'H' +   # run slot
             'H'     # next image dependency tag
         )
-        hdr += struct.pack(image_dep_fmt,
-            image_dep_tag, struct.calcsize(image_dep_fmt),
-            0,0,0,
-            self.version.major or 0, self.version.minor or 0, self.version.revision or 0,
-            self.run_slot,
-            0
+
+        n = 0
+        for image_dep in self.image_dep:
+            rslot = image_dep[0]
+            vrange = image_dep[1]
+            hdr += struct.pack(image_dep_fmt,
+                image_dep_tag[n], struct.calcsize(image_dep_fmt),
+                vrange[0].major, vrange[0].minor, vrange[0].revision,
+                vrange[1].major, vrange[1].minor, vrange[1].revision,
+                rslot,
+                image_dep_tag[n + 1]
+            )
+            n = n + 1
+
+        product_dep_fmt = (e +
+            'HH' +  # rec_tag + rec_len
+            'BBH' + # minimum version
+            'BBH' + # maximum version
+            'I' +   # product hash (djb2)
+            'H' +   # next product dependency tag
+            'H'     # pad16
         )
+
+        n = 0
+        for product_dep in self.product_dep:
+            product_hash = product_dep[0]
+            vrange = product_dep[1]
+            hdr += struct.pack(product_dep_fmt,
+                product_dep_tag[n], struct.calcsize(product_dep_fmt),
+                vrange[0].major, vrange[0].minor, vrange[0].revision,
+                vrange[1].major, vrange[1].minor, vrange[1].revision,
+                product_hash,
+                product_dep_tag[n + 1],
+                0
+            )
+            n = n + 1
 
         image_state_fmt = (e +
             'HH' +  # rec_tag + rec_len
@@ -267,6 +304,9 @@ class Image():
         hdr += seal_pubk
         hdr += seal_sign
         hdr += seal_msg
+
+        if len(hdr) > self.hdrsize:
+            raise Exception("Header to small to fit metadata")
 
         self.payload = bytearray(self.payload)
         self.payload[0:len(hdr)] = hdr

@@ -1,3 +1,0 @@
-[submodule "ext/tinycrypt"]
-	path = ext/tinycrypt
-	url = https://github.com/intel/tinycrypt.git

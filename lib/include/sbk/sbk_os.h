@@ -44,27 +44,15 @@ struct sbk_os_slot {
         uint32_t (*get_size)(const void *ctx);
 };
 
-/**
- * @brief OS interface routines, need to be provided by os.
- *
- */
-
-/** @brief sbk_os_slot_init
+/** @brief sbk_os_slot_init, needs to be provided by os
  *
  * setup sbk_os_slot for usage by bootloader.
  *
  */
 extern int (*sbk_os_slot_init)(struct sbk_os_slot *slot, uint32_t slot_no);
 
-/** @brief sbk_os_feed_watchdog
- *
- * feed watchdog.
- *
- */
-extern int (*sbk_os_feed_watchdog)(void);
-
 /**
- * @brief Interface routines to read/write used by bootloader.
+ * @brief Interface routines to read/write slots used by bootloader.
  *
  */
 
@@ -97,6 +85,83 @@ int sbk_os_slot_prog(const struct sbk_os_slot *slot, uint32_t off,
  * closes a slot and ensures all data is written
  */
 int sbk_os_slot_close(const struct sbk_os_slot *slot);
+
+
+/**
+ * @brief crypto interface definitions
+ *
+ */
+
+struct sbk_os_crypto_digest {
+        uint32_t type;  /* digest type */
+        uint32_t size;  /* digest size */
+        uint8_t *digest; /* digest */
+};
+
+/**
+ * @brief sbk_os_crypto_digest_verify, needs to be provided by os.
+ *
+ */
+extern int (*sbk_os_crypto_digest_verify)(
+        const struct sbk_os_crypto_digest *digest,
+        int (*read_cb)(const void *read_cb_ctx, uint32_t offset, void *data,
+                       uint32_t len),
+        const void *read_cb_ctx, uint32_t len);
+
+struct sbk_os_crypto_signature {
+        uint32_t type;  /* signature type */
+        uint32_t size;  /* signature size */
+        uint8_t *signature; /* pubkey and signature */
+};
+/**
+ * @brief sbk_os_crypto_signature_verify, needs to be provided by os.
+ *
+ */
+extern int (*sbk_os_crypto_signature_verify)(
+        const struct sbk_os_crypto_signature *signature,
+        int (*read_cb)(const void *read_cb_ctx, uint32_t offset, void *data,
+                       uint32_t len),
+        const void *read_cb_ctx, uint32_t len);
+
+struct sbk_os_crypto_kx_in {
+        uint32_t type;
+        uint32_t size;
+        uint8_t *data;
+};
+
+struct sbk_os_crypto_kx_out {
+        uint32_t key_size;
+        uint8_t *key;
+        uint32_t nonce_size;
+        uint8_t *nonce;
+};
+
+/**
+ * @brief sbk_os_crypto_kx, needs to be provided by os.
+ *
+ * Key exchange routine
+ *
+ */
+extern int (*sbk_os_crypto_kx)(const struct sbk_os_crypto_kx_in *kx_in,
+                               const uint8_t *prkey, uint32_t prkey_size,
+                               struct sbk_os_crypto_kx_out *kx_out);
+
+struct sbk_os_crypto_crypt_ctx {
+        uint32_t key_size;
+        uint8_t *key;
+        uint32_t nonce_size;
+        uint8_t *nonce;
+        uint32_t pos;
+};
+
+/**
+ * @brief sbk_os_crypto_crypt_init, needs to be provided by os.
+ *
+ * Initialise encrypt/decrypt context
+ *
+ */
+extern int (*sbk_os_crypto_crypt_init)()
+
 
 #ifdef __cplusplus
 } /* extern "C" */

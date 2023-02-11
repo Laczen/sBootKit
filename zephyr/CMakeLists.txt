@@ -6,11 +6,8 @@ cmake_minimum_required(VERSION 3.13.1)
 # http://docs.zephyrproject.org/application/application.html
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
-# Path to "os" subdirectory of repository root.
-get_filename_component(ROOT_DIR ${CMAKE_CURRENT_LIST_DIR} DIRECTORY)
-# get_filename_component(OS_DIR ${APPLICATION_SOURCE_DIR} DIRECTORY)
 # Path to repository root.
-# get_filename_component(ROOT_DIR ${OS_DIR} DIRECTORY)
+get_filename_component(ROOT_DIR ${CMAKE_CURRENT_LIST_DIR} DIRECTORY)
 
 file(READ "${ROOT_DIR}/VERSION" SBOOTKIT_VERSION)
 # project(sbkboot_${SBOOTKIT_VERSION})

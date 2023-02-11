@@ -11,6 +11,7 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#include <stddef.h>
 #include <stdbool.h>
 
 struct __attribute__((packed)) sbk_version {
@@ -83,6 +84,13 @@ void sbk_product_init_hash(const uint32_t *hash);
  * Set the product version
  */
 void sbk_product_init_version(const struct sbk_version *board_version);
+
+/**
+ * @brief sbk_product_djb2_hash
+ *
+ * Calculate the product hash (djb2)
+ */
+uint32_t sbk_product_djb2_hash(const uint8_t *buf, size_t len);
 
 #ifdef __cplusplus
 }

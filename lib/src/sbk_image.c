@@ -12,26 +12,6 @@
 #include "sbk/sbk_os.h"
 #include "sbk/sbk_crypto.h"
 
-struct __attribute__((packed)) sbk_image_digest {
-        struct sbk_image_meta_rec_hdr rec_hdr;
-        uint16_t type;
-        uint16_t pad16;
-        uint8_t digest[SBK_CRYPTO_FW_HASH_SIZE];
-};
-
-struct __attribute__((packed)) sbk_image_encryption_tranform_info {
-        struct sbk_image_meta_rec_hdr rec_hdr;
-        uint16_t type;
-        uint16_t pad16;
-        uint8_t ekdf[SBK_CRYPTO_FW_ENC_PUBKEY_SIZE];
-};
-
-struct __attribute__((packed)) sbk_image_seal {
-        struct sbk_image_meta_rec_hdr rec_hdr;
-        uint16_t type;
-        uint16_t pad16;
-        uint8_t seal[SBK_CRYPTO_FW_SEAL_SIZE];
-};
 
 static bool sbk_image_tag_is_odd_parity(uint16_t data)
 {
@@ -199,9 +179,6 @@ int sbk_image_seal_verify(const struct sbk_os_slot *slot)
         struct sbk_crypto_se seal_se = {
                 .data = &seal.seal,
         };
-        struct sbk_crypto_se digest_se = {
-                .data = sbk_crypto_digest_from_seal(&seal_se),
-        };
         uint32_t pos = 0U;
 
         rc = sbk_image_get_tag_pos(slot, tag, &pos);
@@ -209,14 +186,8 @@ int sbk_image_seal_verify(const struct sbk_os_slot *slot)
                 goto end;
         }
 
-        rc = sbk_crypto_digest_verify(&digest_se, read_cb, (void *)&cb_ctx, pos);
-        if (rc != 0) {
-                LOG_DBG("MESSAGE hash error");
-                goto end;
-        }
-
         /* verify the signature */
-        rc = sbk_crypto_seal_verify(&seal_se);
+        rc = sbk_crypto_seal_verify(&seal_se, read_cb, (void *)&cb_ctx, pos);
         if (rc != 0) {
                 LOG_DBG("SIGNATURE invalid");
         }
@@ -388,10 +359,10 @@ int sbk_image_bootable(uint16_t slot_no, uint32_t *address)
                 goto end;
         }
 
-        rc = sbk_image_product_verify(&slot);
-        if (rc != 0) {
-                goto end;
-        }
+        // rc = sbk_image_product_verify(&slot);
+        // if (rc != 0) {
+        //         goto end;
+        // }
 
         struct sbk_image_digest image_digest;
 

@@ -21,25 +21,36 @@ extern "C" {
 struct sbk_version;
 struct sbk_version_range;
 
-struct __attribute__((packed)) sbk_image_meta_rec_hdr {
+struct __attribute__((packed)) sbk_meta_rec_hdr {
         uint16_t tag; /* odd-parity tag */
         uint16_t len; /* record length */
 };
 
-struct __attribute__((packed)) sbk_image_meta_start {
-        struct sbk_image_meta_rec_hdr rec_hdr; /* record tag + length */
+struct __attribute__((packed)) sbk_meta_seal {
+        struct sbk_meta_rec_hdr rec_hdr; /* record tag + length */
+        uint32_t key_tag;       /* tag to allow key selection */
+        uint8_t salt[16];       /* input salt (random) */
+        uint32_t aad_size;      /* additional authenticated data (aad) size */
+        uint32_t enc_size;      /* encrypted data (ed) size */
+        uint8_t tag[16];        /* authentication tag (over aad and ed) */
+        uint8_t aad_tag[16];    /* authentication tag (only over aad) */
+};
+
+struct __attribute__((packed)) sbk_image_meta {
+        struct sbk_meta_rec_hdr rec_hdr; /* record tag + length */
         struct sbk_version image_version;
+        uint32_t image_start_address; /* */
+        uint32_t image_flags;    /* confirmed, plain, gzipped, diff image, ...*/
         uint16_t image_dep_tag; /* first tag describing image dependency */
         uint16_t product_dep_tag; /* first tag describing product dependency */
-        uint16_t image_state_tag; /* first tag describing image state */
-        uint16_t next_tag; /* set this to 0x7FFF */
 };
 
 struct __attribute__((packed)) sbk_image_dep_info {
         struct sbk_image_meta_rec_hdr rec_hdr; /* record tag + length */
         struct sbk_version_range vrange;
-        uint16_t run_slot;
+        uint32_t image_start_address;
         uint16_t next_tag;
+        uint16_t pad16;
 };
 
 struct __attribute__((packed)) sbk_product_dep_info {
@@ -48,17 +59,6 @@ struct __attribute__((packed)) sbk_product_dep_info {
         uint32_t product_hash;
         uint16_t next_tag;
         uint16_t pad16;
-};
-
-struct __attribute__((packed)) sbk_image_state {
-        struct sbk_image_meta_rec_hdr rec_hdr; /* record tag + length */
-        uint16_t slot;
-        uint16_t offset;
-        uint32_t size;
-        uint16_t state_type;
-        uint16_t digest_tag;
-        uint16_t transform_tag;
-        uint16_t next_tag;
 };
 
 struct sbk_os_slot;

@@ -1,0 +1,21 @@
+# Copyright (c) 2022 Laczen
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+mainmenu "MINCRYPT configuration"
+
+menu "MINCRYPT settings"
+
+config MINCRYPT
+	bool "Enable MINCRYPT"
+
+if MINCRYPT
+
+module = MINCRYPT
+module-str = mincrypt
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # MINCRYPT
+
+endmenu

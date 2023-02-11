@@ -61,30 +61,32 @@ extern uint8_t ec256_root_pub_key[];
 ZTEST(sbk_crypto_tests, sbk_sign_verify)
 {
 	int err;
-	uint8_t tmp;
 	uint8_t seal[SBK_CRYPTO_FW_SEAL_SIZE];
 	uint8_t *slptr = &seal[0];
 	struct sbk_crypto_se seal_se = {
 		.data = slptr,
 	};
+	struct digest_rd_ctx ctx = {
+                .buffer = test_msg,
+                .buffer_size = SBK_CRYPTO_FW_HASH_SIZE,
+        };
 
 	memcpy(slptr, &ec256_root_pub_key[0], SBK_CRYPTO_FW_SEAL_PUBKEY_SIZE);
 	slptr += SBK_CRYPTO_FW_SEAL_PUBKEY_SIZE;
 	memcpy(slptr, &test_signature[0], SBK_CRYPTO_FW_SEAL_SIGNATURE_SIZE);
-	slptr += SBK_CRYPTO_FW_SEAL_SIGNATURE_SIZE;
-	memcpy(slptr, &test_msg_digest[0], SBK_CRYPTO_FW_SEAL_MESSAGE_SIZE);
-	err = sbk_crypto_seal_verify(&seal_se);
+
+	err = sbk_crypto_seal_verify(&seal_se, &digest_read, (void *)&ctx,
+                		     test_msg_bytes);
 	zassert_true(err == 0, "Signature validation failed: [err %d]", err);
 
-	/* modify the message digest */
-	tmp = test_msg_digest[0];
-	test_msg_digest[0] >>=1;
-	memcpy(slptr, &test_msg_digest[0], SBK_CRYPTO_FW_SEAL_MESSAGE_SIZE);
-	err = sbk_crypto_seal_verify(&seal_se);
-	zassert_false(err == 0, "Invalid hash generates valid signature");
+	uint8_t tmp = test_msg[0];
 
-	/* reset the message digest */
-	test_msg_digest[0] = tmp;
+	test_msg[0] += 1;
+	err = sbk_crypto_seal_verify(&seal_se, &digest_read, (void *)&ctx,
+                		     test_msg_bytes);
+	zassert_false(err == 0, "Signature validation error: [err %d]", err);
+
+	test_msg[0] = tmp;
 }
 
 extern uint8_t test_enc_pubkey[];

@@ -70,3 +70,14 @@ void sbk_product_init_version(const struct sbk_version *dev_version)
 {
         product_version_ptr = (struct sbk_version *)dev_version;
 }
+
+uint32_t sbk_product_djb2_hash(const uint8_t *buf, size_t len)
+{
+    uint32_t hash = 5381;
+
+    for (size_t i = 0; i < len; i++) {
+        hash = hash * 33 + buf[i];
+    }
+
+    return hash;
+}

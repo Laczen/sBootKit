@@ -14,6 +14,7 @@ struct sbk_crypto_se {
 };
 
 #ifdef CONFIG_SBK_TINYCRYPT
+#include "tinycrypt/constants.h"
 #include "tinycrypt/ecc.h"
 #include "tinycrypt/aes.h"
 #include "tinycrypt/ecc_dh.h"
@@ -23,10 +24,8 @@ struct sbk_crypto_se {
 
 #define SBK_CRYPTO_FW_SEAL_PUBKEY_SIZE 2 * NUM_ECC_BYTES
 #define SBK_CRYPTO_FW_SEAL_SIGNATURE_SIZE 2 * NUM_ECC_BYTES
-#define SBK_CRYPTO_FW_SEAL_MESSAGE_SIZE NUM_ECC_BYTES
 #define SBK_CRYPTO_FW_SEAL_SIZE SBK_CRYPTO_FW_SEAL_PUBKEY_SIZE +               \
-                                SBK_CRYPTO_FW_SEAL_SIGNATURE_SIZE +            \
-                                SBK_CRYPTO_FW_SEAL_MESSAGE_SIZE
+                                SBK_CRYPTO_FW_SEAL_SIGNATURE_SIZE
 #define SBK_CRYPTO_FW_HASH_SIZE NUM_ECC_BYTES
 #define SBK_CRYPTO_FW_ENC_PUBKEY_SIZE 2 * NUM_ECC_BYTES
 #define SBK_CRYPTO_FW_ENC_PRIVKEY_SIZE NUM_ECC_BYTES
@@ -68,12 +67,18 @@ int sbk_crypto_get_encr_param(struct sbk_crypto_se *out_se,
  *
  * Verifies the firmware seal
  *
- * @param seal_se: seal data (pubkey, signature, message digest) as secure
+ * @param seal_se: seal data (pubkey, signature) as secure
  *                 element
+ * @param read_cb: read callback function for message
+ * @param read_cb_ctx: read callback context
+ * @param len: message size
  * @retval -ERRNO errno code if error
  * @retval 0 if succesfull
  */
-int sbk_crypto_seal_verify(const struct sbk_crypto_se *seal_se);
+int sbk_crypto_seal_verify(const struct sbk_crypto_se *seal_se,
+                           int (*read_cb)(const void *ctx, uint32_t offset,
+                                          void *data, uint32_t len),
+                           const void *read_cb_ctx, uint32_t len);
 
 /**
  * @brief sbk_crypto_seal_pkey_verify
@@ -88,16 +93,6 @@ int sbk_crypto_seal_verify(const struct sbk_crypto_se *seal_se);
  */
 int sbk_crypto_seal_pkey_verify(const struct sbk_crypto_se *seal_se,
                                 const uint8_t *pkey);
-
-/**
- * @brief sbk_crypto_digest_from_seal
- *
- * Get a pointer to the message digest from a seal
- *
- * @param seal_se: seal data (pubkey, signature, message digest) as secure
- *                 element
- */
-const uint8_t *sbk_crypto_digest_from_seal(const struct sbk_crypto_se *seal_se);
 
 /**
  * @brief sbk_crypto_digest_verify

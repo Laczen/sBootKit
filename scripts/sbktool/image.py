@@ -290,7 +290,7 @@ class Image():
         seal_msg = sha.digest()
         seal_pubk = signkey.get_public_key_bytearray()
         seal_sign = signkey.sign_prehashed(seal_msg)
-        seal_len = len(seal_pubk) + len(seal_msg) + len(seal_sign)
+        seal_len = len(seal_pubk) + len(seal_sign)
         image_seal_fmt = (e +
             'HH' +  # rec_tag + rec_len
             'H' +   # type
@@ -303,7 +303,6 @@ class Image():
         )
         hdr += seal_pubk
         hdr += seal_sign
-        hdr += seal_msg
 
         if len(hdr) > self.hdrsize:
             raise Exception("Header to small to fit metadata")

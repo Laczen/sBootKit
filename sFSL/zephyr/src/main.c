@@ -17,10 +17,18 @@
 #include "sbk/sbk_product.h"
 #include "sbk/sbk_image.h"
 
-#define PRODUCT_HASH 0xAABBCCDD
-#define PRODUCT_VER_MAJ 0
-#define PRODUCT_VER_MIN 0
-#define PRODUCT_VER_REV 0
+#ifndef CONFIG_PRODUCT_NAME
+#define CONFIG_PRODUCT_NAME "TEST"
+#endif
+#ifndef CONFIG_PRODUCT_VER_MAJ
+#define CONFIG_PRODUCT_VER_MAJ 0
+#endif
+#ifndef CONFIG_PRODUCT_VER_MIN
+#define CONFIG_PRODUCT_VER_MIN 0
+#endif
+#ifndef CONFIG_PRODUCT_VER_REV
+#define CONFIG_PRODUCT_VER_REV 0
+#endif
 
 #define FLASH_OFFSET CONFIG_FLASH_BASE_ADDRESS
 
@@ -117,25 +125,28 @@ static int slot_init(struct sbk_os_slot *slot, uint32_t slot_no)
 }
 
 int (*sbk_os_slot_init)(struct sbk_os_slot *slot, uint32_t slot_no) = slot_init;
-int (*sbk_os_feed_watchdog)(void) = NULL;
 extern void jump_image(uint32_t address);
 struct sbk_shared_data shared_data Z_GENERIC_SECTION(BL_SHARED_SRAM);
 
 void main(void)
 {
+        uint32_t product_hash;
+
         LOG_DBG("Welcome...");
+        product_hash = sbk_product_djb2_hash(CONFIG_PRODUCT_NAME,
+                                             sizeof(CONFIG_PRODUCT_NAME));
 
         if (sbk_os_feed_watchdog != NULL) {
                 (void)sbk_os_feed_watchdog();
         }
 
-        if ((shared_data.product_hash != PRODUCT_HASH) ||
+        if ((shared_data.product_hash != product_hash) ||
             (shared_data.bcnt > BOOT_RETRIES) ||
             (shared_data.bslot >= ARRAY_SIZE(slots))) {
-                shared_data.product_hash = PRODUCT_HASH;
-                shared_data.product_ver.major = PRODUCT_VER_MAJ;
-                shared_data.product_ver.minor = PRODUCT_VER_MIN;
-                shared_data.product_ver.revision = PRODUCT_VER_REV;
+                shared_data.product_hash = product_hash;
+                shared_data.product_ver.major = CONFIG_PRODUCT_VER_MAJ;
+                shared_data.product_ver.minor = CONFIG_PRODUCT_VER_MIN;
+                shared_data.product_ver.revision = CONFIG_PRODUCT_VER_REV;
                 shared_data.bslot = ARRAY_SIZE(slots) - 1U;
                 shared_data.bcnt = 0U;
         }

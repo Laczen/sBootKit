@@ -10,14 +10,14 @@
 
 #include "sbk/sbk_crypto.h"
 #include "sbk/sbk_util.h"
+#include "sbk/sbk_os.h"
 
 #ifdef CONFIG_SBK_TINYCRYPT
-/* The default_CSPRNG is used to improve side channel attacks for
- * uECC_shared_secret(). As this is only used internally we can savely
- * set the default_CSPRNG() to do nothing
- */
 int default_CSPRNG(uint8_t *dest, unsigned int size) {
-        return 1;
+        if (sbk_os_generate_random(dest, size) == 0) {
+                return TC_CRYPTO_SUCCESS;
+        }
+        return TC_CRYPTO_FAIL;
 }
 #endif
 
@@ -29,7 +29,53 @@ static inline bool sbk_crypto_se_valid(const struct sbk_crypto_se *se)
 #endif
 
 #ifdef CONFIG_SBK_TINYCRYPT
-int sbk_crypto_seal_verify(const struct sbk_crypto_se *seal_se)
+int sbk_crypto_sha256(uint8_t *sha256,
+                      int (*read_cb)(const void *ctx, uint32_t offset,
+                                     void *data,uint32_t len),
+                      const void *read_cb_ctx, uint32_t len)
+{
+        struct tc_sha256_state_struct s;
+        uint8_t buf[SBK_CRYPTO_FW_HASH_SIZE];
+        uint32_t offset = 0U;
+        int rc = 0;
+
+        if (tc_sha256_init(&s) != TC_CRYPTO_SUCCESS) {
+                rc = -SBK_EC_EFAULT;
+                goto end;
+        }
+
+        while (len) {
+                uint32_t rdlen = SBK_MIN(len, sizeof(buf));
+                rc = read_cb(read_cb_ctx, offset, buf, rdlen);
+                if (rc != 0) {
+                        goto end;
+                }
+
+                if (tc_sha256_update(&s, buf, rdlen) != TC_CRYPTO_SUCCESS) {
+                        rc = -SBK_EC_EFAULT;
+                        goto end;
+                }
+
+                len -= rdlen;
+                offset += rdlen;
+        }
+
+        if (tc_sha256_final(buf, &s) != TC_CRYPTO_SUCCESS) {
+                rc = -SBK_EC_EFAULT;
+                goto end;
+        }
+
+        memcpy(sha256, buf, sizeof(buf));
+end:
+        return rc;
+}
+#endif
+
+#ifdef CONFIG_SBK_TINYCRYPT
+int sbk_crypto_seal_verify(const struct sbk_crypto_se *seal_se,
+                           int (*read_cb)(const void *ctx, uint32_t offset,
+                                          void *data,uint32_t len),
+                           const void *read_cb_ctx, uint32_t len)
 {
         if (!sbk_crypto_se_valid(seal_se)) {
                 return -SBK_EC_EFAULT;
@@ -38,16 +84,19 @@ int sbk_crypto_seal_verify(const struct sbk_crypto_se *seal_se)
         const struct uECC_Curve_t * curve = uECC_secp256r1();
         const uint8_t *pubkey = (const uint8_t *)seal_se->data;
         const uint8_t *sign = pubkey + SBK_CRYPTO_FW_SEAL_PUBKEY_SIZE;
-        const uint8_t *msg = sign + SBK_CRYPTO_FW_SEAL_SIGNATURE_SIZE;
-        const uint32_t msg_size = SBK_CRYPTO_FW_SEAL_MESSAGE_SIZE;
+        uint8_t sha256[SBK_CRYPTO_FW_HASH_SIZE];
         int rc;
 
-        if (uECC_verify(pubkey, msg, msg_size, sign, curve) == 0) {
-                rc = -SBK_EC_EFAULT;
+        rc = sbk_crypto_sha256(sha256, read_cb, read_cb_ctx, len);
+        if (rc != 0) {
                 goto end;
         }
 
-        rc = 0;
+        if (uECC_verify(pubkey, sha256, sizeof(sha256), sign, curve) !=
+            TC_CRYPTO_SUCCESS) {
+                rc = -SBK_EC_EFAULT;
+        }
+
 end:
         return rc;
 }
@@ -83,38 +132,15 @@ int sbk_crypto_digest_verify(const struct sbk_crypto_se *digest_se,
         }
 
         const uint8_t *digest = (const uint8_t *)digest_se->data;
-        struct tc_sha256_state_struct s;
-        uint8_t buf[SBK_CRYPTO_FW_HASH_SIZE];
-        uint32_t offset = 0U;
+        uint8_t sha256[SBK_CRYPTO_FW_HASH_SIZE];
         int rc = 0;
 
-        if (tc_sha256_init(&s) == 0) {
-                rc = -SBK_EC_EFAULT;
+        rc = sbk_crypto_sha256(sha256, read_cb, read_cb_ctx, len);
+        if (rc != 0) {
                 goto end;
         }
 
-        while (len) {
-                uint32_t rdlen = SBK_MIN(len, sizeof(buf));
-                rc = read_cb(read_cb_ctx, offset, buf, rdlen);
-                if (rc != 0) {
-                        goto end;
-                }
-
-                if (tc_sha256_update(&s, buf, rdlen) == 0) {
-                        rc = -SBK_EC_EFAULT;
-                        goto end;
-                }
-
-                len -= rdlen;
-                offset += rdlen;
-        }
-
-        if (tc_sha256_final(buf, &s) == 0) {
-                rc = -SBK_EC_EFAULT;
-                goto end;
-        }
-
-        if (memcmp(digest, buf, SBK_CRYPTO_FW_HASH_SIZE) != 0) {
+        if (memcmp(digest, sha256, SBK_CRYPTO_FW_HASH_SIZE) != 0) {
                 rc = -SBK_EC_EFAULT;
         }
 
@@ -142,32 +168,33 @@ int sbk_crypto_get_encr_param(struct sbk_crypto_se *out_se,
         struct tc_sha256_state_struct s;
         int rc;
 
-        if (uECC_valid_public_key(pubkey, curve) != 0) {
+        if (uECC_valid_public_key(pubkey, curve) != TC_CRYPTO_SUCCESS) {
                 rc = -SBK_EC_EFAULT;
                 goto end;
         }
 
-        if (uECC_shared_secret(pubkey, privkey, secret, curve) == 0) {
+        if (uECC_shared_secret(pubkey, privkey, secret, curve) !=
+            TC_CRYPTO_SUCCESS) {
                 rc = -SBK_EC_EFAULT;
                 goto end;
         }
 
-        if (tc_sha256_init(&s) == 0) {
+        if (tc_sha256_init(&s) != TC_CRYPTO_SUCCESS) {
                 rc = -SBK_EC_EFAULT;
                 goto end;
         }
 
-        if (tc_sha256_update(&s, secret, sizeof(secret)) == 0) {
+        if (tc_sha256_update(&s, secret, sizeof(secret)) != TC_CRYPTO_SUCCESS) {
                 rc = -SBK_EC_EFAULT;
                 goto end;
         }
 
-        if (tc_sha256_update(&s, ext, 4) == 0) {
+        if (tc_sha256_update(&s, ext, 4) != TC_CRYPTO_SUCCESS) {
                 rc = -SBK_EC_EFAULT;
                 goto end;
         }
 
-        if (tc_sha256_final(param, &s) == 0) {
+        if (tc_sha256_final(param, &s) != TC_CRYPTO_SUCCESS) {
                 rc = -SBK_EC_EFAULT;
                 goto end;
         }
@@ -193,11 +220,17 @@ int sbk_crypto_aes_ctr_mode(uint8_t *buf, uint32_t len,
         uint8_t u8;
         int rc;
 
-        (void)tc_aes128_set_encrypt_key(&sched, key);
+        if (tc_aes128_set_encrypt_key(&sched, key) != TC_CRYPTO_SUCCESS) {
+                rc = -SBK_EC_EFAULT;
+                goto end;
+
+        }
+
         for (uint32_t i = 0U; i < len; i++) {
                 uint32_t blk_off = i & (sizeof(buffer) - 1);
                 if (blk_off == 0U) {
-                        if (!tc_aes_encrypt(buffer, iv, &sched)) {
+                        if (tc_aes_encrypt(buffer, iv, &sched) !=
+                            TC_CRYPTO_SUCCESS) {
                                 rc = -SBK_EC_EFAULT;
                                 goto end;
                         }

@@ -1,9 +1,9 @@
-#ifndef ZEPHYR_OS_CONFIG_H_
-#define ZEPHYR_OS_CONFIG_H_
+#ifndef ZEPHYR_UTIL_H_
+#define ZEPHYR_UTIL_H_
 
 #include <zephyr/sys/__assert.h>
 #include <zephyr/logging/log.h>
-LOG_MODULE_DECLARE(sbk, CONFIG_SBK_LOG_LEVEL);
+LOG_MODULE_DECLARE(sbk, CONFIG_UTIL_LOG_LEVEL);
 
 #ifdef __cplusplus
 extern "C"

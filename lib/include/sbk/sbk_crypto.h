@@ -8,122 +8,98 @@
 
 #include <stdint.h>
 
-struct sbk_crypto_se {
-        void *ctx;
-        const void *data;
-};
-
-#ifdef CONFIG_SBK_TINYCRYPT
-#include "tinycrypt/constants.h"
-#include "tinycrypt/ecc.h"
-#include "tinycrypt/aes.h"
-#include "tinycrypt/ecc_dh.h"
-#include "tinycrypt/ecc_dsa.h"
-#include "tinycrypt/sha256.h"
-#include "tinycrypt/aes.h"
-
-#define SBK_CRYPTO_FW_SEAL_PUBKEY_SIZE 2 * NUM_ECC_BYTES
-#define SBK_CRYPTO_FW_SEAL_SIGNATURE_SIZE 2 * NUM_ECC_BYTES
-#define SBK_CRYPTO_FW_SEAL_SIZE SBK_CRYPTO_FW_SEAL_PUBKEY_SIZE +               \
-                                SBK_CRYPTO_FW_SEAL_SIGNATURE_SIZE
-#define SBK_CRYPTO_FW_HASH_SIZE NUM_ECC_BYTES
-#define SBK_CRYPTO_FW_ENC_PUBKEY_SIZE 2 * NUM_ECC_BYTES
-#define SBK_CRYPTO_FW_ENC_PRIVKEY_SIZE NUM_ECC_BYTES
-#define SBK_CRYPTO_FW_AESCTR_KEY_SIZE TC_AES_KEY_SIZE
-#define SBK_CRYPTO_FW_AESCTR_CTR_SIZE TC_AES_KEY_SIZE
-#define SBK_CRYPTO_FW_AESCTR_PAR_SIZE SBK_CRYPTO_FW_AESCTR_KEY_SIZE +          \
-                                      SBK_CRYPTO_FW_AESCTR_CTR_SIZE
-#define SBK_CRYPTO_FW_AESCTR_BLOCK_SIZE TC_AES_BLOCK_SIZE
-
-#endif /* CONFIG_SBK_TINYCRYPT */
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define SBK_CRYPTO_KXCH_BUF_SIZE 64
+#define SBK_CRYPTO_AUTH_BUF_SIZE 16 + 15 * 4
+#define SBK_CRYPTO_KM_BUF_SIZE 44
+
 
 /** @brief crypto API
  * @{
  */
 
 /**
- * @brief sbk_crypto_get_encr_param
+ * @brief sbk_crypto_cwipe
  *
- * Get the parameter used for encryption.
+ * clear a crypto buffer.
  *
- * @param out_se: returned key and nonce as secure element
- * @param pub_se: public key structure used to generate the shared secret as
- *                secure element
- * @param priv_se: private key used to generate the shared secret as secure
- *                 element
- * @retval -ERRNO errno code if error
- * @retval 0 if succesfull
+ * @retval state size
  */
-int sbk_crypto_get_encr_param(struct sbk_crypto_se *out_se,
-                              const struct sbk_crypto_se *pub_se,
-                              const struct sbk_crypto_se *priv_se);
+void sbk_crypto_cwipe(void *secret, size_t size);
 
 /**
- * @brief sbk_crypto_seal_verify
+ * @brief sbk_crypto_kxch_init
  *
- * Verifies the firmware seal
+ * Key exchange init phase - generate prk
  *
- * @param seal_se: seal data (pubkey, signature) as secure
- *                 element
- * @param read_cb: read callback function for message
- * @param read_cb_ctx: read callback context
- * @param len: message size
- * @retval -ERRNO errno code if error
+ * @param prk: returned pseudo random key,
+ * @param ktag: key tag used to identify private key,
+ * @param salt: salt used in the prk generation,
+ * @param salt_size:
+ * @retval 1 if key_idx to large,
  * @retval 0 if succesfull
  */
-int sbk_crypto_seal_verify(const struct sbk_crypto_se *seal_se,
-                           int (*read_cb)(const void *ctx, uint32_t offset,
-                                          void *data, uint32_t len),
-                           const void *read_cb_ctx, uint32_t len);
+int sbk_crypto_kxch_init(void *prk, unsigned int key_idx, const uint8_t *salt,
+                          size_t salt_size);
 
 /**
- * @brief sbk_crypto_seal_pkey_verify
+ * @brief sbk_crypto_kxch_final
  *
- * Verifies the pubkey used in the seal
+ * Key exchange final phase - generate keymaterial and clear prk
  *
- * @param seal_se: seal data (pubkey, signature, message digest) as secure
- *                 element
- * @param pkey: pubkey to verify
- * @retval -ERRNO errno code if error
+ * @param keymaterial: generated key material
+ * @param prk: input pseudo random key,
+ * @param context: key material context (what will it be used for),
+ * @param context_size:
+ */
+void sbk_crypto_kxch_final(void *keymaterial, void *prk, const uint8_t *context,
+                           size_t context_size);
+
+/**
+ * @brief sbk_crypto_auth_state_size
+ *
+ * Get the authentication state size.
+ *
+ * @retval state size
+ */
+size_t sbk_crypto_auth_state_size(void);
+
+/**
+ * @brief sbk_crypto_auth_init
+ *
+ * Initialize an authentication request.
+ *
+ * @param state: authentication state
+ */
+void sbk_crypto_auth_init(void *state);
+
+/**
+ * @brief sbk_crypto_auth_update
+ *
+ * Update authentication.
+ *
+ * @param state: authentication state
+ * @param data: data
+ * @param len: data size
+ */
+void sbk_crypto_auth_update(void *state, void *data, size_t len);
+
+/**
+ * @brief sbk_crypto_auth_final
+ *
+ * Check the authentication tag.
+ *
+ * @param tag: expected tag
+ * @param state: authentication state
+ * @retval -ERRNO errno code if tag does not match,
  * @retval 0 if succesfull
+ *
  */
-int sbk_crypto_seal_pkey_verify(const struct sbk_crypto_se *seal_se,
-                                const uint8_t *pkey);
+int sbk_crypto_auth_final(const void *tag, void *state);
 
-/**
- * @brief sbk_crypto_digest_verify
- *
- * Verifies a digest.
- *
- * @param hash_se: expected message digest as secure element
- * @param read_cb: read callback function
- * @param read_cb_ctx: read callback context
- * @param len: area size
- * @retval -ERRNO errno code if error
- * @retval 0 if succesfull
- */
-int sbk_crypto_digest_verify(const struct sbk_crypto_se *digest_se,
-                             int (*read_cb)(const void *ctx, uint32_t offset,
-                                            void *data,uint32_t len),
-                             const void *read_cb_ctx, uint32_t len);
-
-/**
- * @brief sbk_crypto_aes_ctr_mode
- *
- * perform aes ctr calculation
- *
- * @param buf pointer to buffer to encrypt / encrypted buffer
- * @param len bytes to encrypt
- * @param param_se : encryption key and ctr (as secure element)
- * @retval 0 Success
- * @retval -ERRNO errno code if error
- */
-int sbk_crypto_aes_ctr_mode(uint8_t *buf, uint32_t len,
-                            struct sbk_crypto_se *param_se);
 
 /**
  * @}

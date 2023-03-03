@@ -14,14 +14,12 @@
 # limitations under the License.
 
 """
-Cryptographic key management for imgtool.
+Cryptographic key management for sbktool.
 """
 
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey, EllipticCurvePublicKey
+from Crypto.IO import PEM
 
-from .ec import EC256P1, EC256P1Public, ECUsageError
+from .pk import PK, PKUsageError
 
 class PasswordRequired(Exception):
     """Raised to indicate that the key is password protected, but a
@@ -30,38 +28,12 @@ class PasswordRequired(Exception):
 
 def load(path, passwd=None):
     """Try loading a key from the given path.  Returns None if the password wasn't specified."""
-    with open(path, 'rb') as f:
+    with open(path, 'r') as f:
         raw_pem = f.read()
     try:
-        pk = serialization.load_pem_private_key(
-                raw_pem,
-                password=passwd,
-                backend=default_backend())
-    # Unfortunately, the crypto library raises unhelpful exceptions,
-    # so we have to look at the text.
-    except TypeError as e:
+        [pk, marker, encrypted] = PEM.decode(raw_pem, passphrase = passwd)
+        return PK(pk)
+    except ValueError as e:
         msg = str(e)
-        if "private key is encrypted" in msg:
+        if "Incorrect password?" in msg:
             return None
-        raise e
-    except ValueError:
-        # This seems to happen if the key is a public key, let's try
-        # loading it as a public key.
-        pk = serialization.load_pem_public_key(
-                raw_pem,
-                backend=default_backend())
-
-    if isinstance(pk, EllipticCurvePrivateKey):
-        if pk.curve.name != 'secp256r1':
-            raise Exception("Unsupported EC curve: " + pk.curve.name)
-        if pk.key_size != 256:
-            raise Exception("Unsupported EC size: " + pk.key_size)
-        return EC256P1(pk)
-    elif isinstance(pk, EllipticCurvePublicKey):
-        if pk.curve.name != 'secp256r1':
-            raise Exception("Unsupported EC curve: " + pk.curve.name)
-        if pk.key_size != 256:
-            raise Exception("Unsupported EC size: " + pk.key_size)
-        return EC256P1Public(pk)
-    else:
-        raise Exception("Unknown key type: " + str(type(pk)))

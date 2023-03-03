@@ -30,10 +30,10 @@ enum sbk_error_codes {
         SBK_EC_EFAULT = 14,
 };
 
-#ifdef CONFIG_SBK_OS_INCLUDE
+#ifdef CONFIG_SBK_UTIL_INCLUDE
 #define SBK_STRINGIZE(x) SBK_STRINGIZE2(x)
 #define SBK_STRINGIZE2(x) #x
-#include SBK_STRINGIZE(CONFIG_SBK_OS_INCLUDE)
+#include SBK_STRINGIZE(CONFIG_SBK_UTIL_INCLUDE)
 #endif
 
 #ifndef SBK_LOG_ERR

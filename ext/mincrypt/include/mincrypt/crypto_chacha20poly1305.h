@@ -27,38 +27,27 @@ extern "C" {
 
 #define CRYPTO_CHACHA20_BLOCKSIZE 64
 
-typedef struct {
-	uint8_t key[32];
-	uint8_t nonce[8];
-	uint64_t ic;
-} crypto_chacha20_ref_in;
-
-typedef struct {
-	uint8_t key[32];
-	uint8_t nonce[12];
-	uint32_t ic;
-} crypto_chacha20_ietf_in;
-
-void chacha20_ref_xor(uint8_t *c, const uint8_t *m, uint64_t clen,
-		      crypto_chacha20_ref_in *in);
-
-void chacha20_ietf_xor(uint8_t *c, const uint8_t *m, uint32_t clen,
-		       crypto_chacha20_ietf_in *in);
+size_t crypto_chacha20_ref_block_size(void);
+size_t crypto_chacha20_ref_state_size(void);
+void crypto_chacha20_ref_init(void *state, const uint8_t *key,
+			      const uint8_t *nonce, uint64_t ic);
+void crypto_chacha20_ref_xor(uint8_t *c, const uint8_t *m, uint64_t clen,
+		      	     void *state);
+size_t crypto_chacha20_ietf_block_size(void);
+size_t crypto_chacha20_ietf_state_size(void);
+void crypto_chacha20_ietf_init(void *state, const uint8_t *key,
+		               const uint8_t *nonce, uint32_t ic);
+void crypto_chacha20_ietf_xor(uint8_t *c, const uint8_t *m, uint32_t clen,
+		              void *state);
 
 #define CRYPTO_POLY1305_BLOCKSIZE 16
 
-typedef struct {
-	uint32_t r[5];
-	uint32_t h[5];
-	uint32_t pad[4];
-        uint32_t bufpos;
-	uint8_t buf[CRYPTO_POLY1305_BLOCKSIZE];
-} crypto_poly1305_ctx;
-
-void crypto_poly1305_init(crypto_poly1305_ctx *ctx, const uint8_t key[32]);
-void crypto_poly1305_update(crypto_poly1305_ctx *ctx, const uint8_t *msg,
-                            size_t msglen);
-void crypto_poly1305_final(uint8_t mac[16], crypto_poly1305_ctx *ctx);
+size_t crypto_poly1305_block_size(void);
+size_t crypto_poly1305_state_size(void);
+void crypto_poly1305_init(void *state, const uint8_t key[32]);
+void crypto_poly1305_update(void *state, const uint8_t *msg, size_t msglen);
+void crypto_poly1305_flush(void *state);
+void crypto_poly1305_final(uint8_t mac[16], void *state);
 
 void crypto_poly1305(uint8_t mac[16], const uint8_t key[32], const uint8_t *msg,
                      size_t msglen);

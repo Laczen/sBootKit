@@ -9,7 +9,7 @@ setuptools.setup(
     url="",
     packages=setuptools.find_packages(),
     install_requires=[
-        'cryptography>=2.4.2',
+        'pycryptodome>=3.10.1',
         'intelhex>=2.2.1',
         'click',
     ],

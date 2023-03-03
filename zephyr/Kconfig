@@ -10,8 +10,8 @@ menu "SBootKit settings"
 config SBK
 	bool "Enable sBootKit"
 
-config SBK_TINYCRYPT
-        bool "Enable tinycrypt"
+config SBK_MINCRYPT
+        bool "Enable mincrypt"
 
 if SBK
 

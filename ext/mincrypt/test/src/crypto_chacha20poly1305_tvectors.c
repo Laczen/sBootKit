@@ -69,7 +69,7 @@ int crypto_chacha20_testcnt(void)
 
 int crypto_chacha20_test(int index)
 {
-	crypto_chacha20_ietf_in in;
+	uint8_t in[crypto_chacha20_ietf_state_size()];
 	uint8_t *key = (uint8_t *)&chacha20_tvectors[index].key[0];
 	uint8_t *nonce = (uint8_t *)&chacha20_tvectors[index].nonce[0];
 	uint8_t *msg = (uint8_t *)&chacha20_tvectors[index].msg[0];
@@ -78,11 +78,8 @@ int crypto_chacha20_test(int index)
 	uint32_t ic = chacha20_tvectors[index].ic;
 	uint8_t c[msglen];
 
-	memcpy(&in.key, key, sizeof(in.key));
-	memcpy(&in.nonce, nonce, sizeof(in.nonce));
-	in.ic = ic;
-
-	chacha20_ietf_xor(c, msg, msglen, &in);
+	crypto_chacha20_ietf_init(&in, key, nonce, ic);
+	crypto_chacha20_ietf_xor(c, msg, msglen, &in);
 	return compare(c, res, msglen);
 }
 
@@ -306,12 +303,12 @@ int crypto_poly1305_testcnt(void)
 
 int crypto_poly1305_test(int index)
 {
-	uint8_t mac[32];
+	uint8_t mac[crypto_poly1305_block_size()];
 	uint8_t *key = (uint8_t *)&poly1305_tvectors[index].key[0];
 	uint8_t *msg = (uint8_t *)&poly1305_tvectors[index].msg[0];
 	uint8_t *msgmac = (uint8_t *)&poly1305_tvectors[index].mac[0];
 	size_t msglen = poly1305_tvectors[index].msg_length;
 
 	crypto_poly1305(mac, key, msg, msglen);
-	return compare(mac, msgmac, CRYPTO_POLY1305_BLOCKSIZE);
+	return compare(mac, msgmac, crypto_poly1305_block_size());
 }

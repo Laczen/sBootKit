@@ -80,14 +80,14 @@ const struct flash_slot_ctx slots[2] = {
         }
 };
 
-static int read(const void *ctx, uint32_t off, void *data, uint32_t len)
+static int read(const void *ctx, unsigned long off, void *data, size_t len)
 {
         const struct flash_slot_ctx *sctx = (const struct flash_slot_ctx *)ctx;
 
         return flash_read(sctx->dev, sctx->off + off, data, len);
 }
 
-static int prog(const void *ctx, uint32_t off, const void *data, uint32_t len)
+static int prog(const void *ctx, unsigned long off, const void *data, size_t len)
 {
         /* The secure First Stage Loader does not program */
         return 0;
@@ -99,21 +99,21 @@ static int sync(const void *ctx)
         return 0;
 }
 
-static uint32_t get_start_address(const void *ctx)
+static unsigned long get_start_address(const void *ctx)
 {
         const struct flash_slot_ctx *sctx = (const struct flash_slot_ctx *)ctx;
 
         return FLASH_OFFSET + sctx->off;
 }
 
-static uint32_t get_size(const void *ctx)
+static size_t get_size(const void *ctx)
 {
         const struct flash_slot_ctx *sctx = (const struct flash_slot_ctx *)ctx;
 
         return sctx->size;
 }
 
-static int slot_init(struct sbk_os_slot *slot, uint32_t slot_no)
+static int slot_init(struct sbk_os_slot *slot, unsigned int slot_no)
 {
         slot->ctx = (void *)&slots[slot_no];
         slot->read = read;
@@ -124,7 +124,7 @@ static int slot_init(struct sbk_os_slot *slot, uint32_t slot_no)
         return 0;
 }
 
-int (*sbk_os_slot_init)(struct sbk_os_slot *slot, uint32_t slot_no) = slot_init;
+int (*sbk_os_slot_init)(struct sbk_os_slot *slot, unsigned int slot_no) = slot_init;
 extern void jump_image(uint32_t address);
 struct sbk_shared_data shared_data Z_GENERIC_SECTION(BL_SHARED_SRAM);
 
@@ -132,13 +132,9 @@ void main(void)
 {
         uint32_t product_hash;
 
-        LOG_DBG("Welcome...");
+        SBK_LOG_DBG("Welcome...");
         product_hash = sbk_product_djb2_hash(CONFIG_PRODUCT_NAME,
                                              sizeof(CONFIG_PRODUCT_NAME));
-
-        if (sbk_os_feed_watchdog != NULL) {
-                (void)sbk_os_feed_watchdog();
-        }
 
         if ((shared_data.product_hash != product_hash) ||
             (shared_data.bcnt > BOOT_RETRIES) ||
@@ -147,7 +143,7 @@ void main(void)
                 shared_data.product_ver.major = CONFIG_PRODUCT_VER_MAJ;
                 shared_data.product_ver.minor = CONFIG_PRODUCT_VER_MIN;
                 shared_data.product_ver.revision = CONFIG_PRODUCT_VER_REV;
-                shared_data.bslot = ARRAY_SIZE(slots) - 1U;
+                shared_data.bslot = 0U;
                 shared_data.bcnt = 0U;
         }
 
@@ -163,12 +159,27 @@ void main(void)
         int rc;
 
         for (uint32_t i = 0; i < ARRAY_SIZE(slots); i++) {
-                if (shared_data.bslot == ARRAY_SIZE(slots)) {
+                struct sbk_os_slot slot;
+
+                if (shared_data.bslot >= ARRAY_SIZE(slots)) {
                         shared_data.bslot = 0U;
                 }
 
-                rc = sbk_image_bootable(shared_data.bslot, &address);
+                SBK_LOG_DBG("Testing slot %d", shared_data.bslot);
+
+                rc = sbk_os_slot_open(&slot, shared_data.bslot);
                 if (rc != 0) {
+                        shared_data.bslot = 0U;
+                        continue;
+                }
+
+                rc = sbk_image_bootable(&slot, &address);
+                (void)sbk_os_slot_close(&slot);
+
+                if (rc != 0) {
+                        SBK_LOG_DBG("Failed booting image in slot %d",
+                                    shared_data.bslot);
+
                         shared_data.bslot++;
                         shared_data.bcnt = 0U;
                         continue;
@@ -177,6 +188,8 @@ void main(void)
                 shared_data.bcnt++;
                 jump_image(address);
         }
+
+        SBK_LOG_DBG("No bootable image found");
 
         while(1);
 }

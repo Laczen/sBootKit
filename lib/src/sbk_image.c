@@ -12,7 +12,6 @@
 #include "sbk/sbk_os.h"
 #include "sbk/sbk_crypto.h"
 
-
 static bool sbk_image_tag_is_odd_parity(uint16_t data)
 {
         data ^= data >> 8;
@@ -21,15 +20,13 @@ static bool sbk_image_tag_is_odd_parity(uint16_t data)
         return ((0x6996 >> data) & 1U) == 1U;
 }
 
-int sbk_image_walk_tag(const struct sbk_os_slot *slot, uint16_t tag,
-                       int (*cb)(void *cb_ctx, uint32_t pos, uint16_t rlen),
-                       void *cb_ctx)
+static int sbk_image_get_tag_pos(const struct sbk_os_slot *slot, uint32_t *pos,
+                                 uint16_t tag, uint16_t len)
 {
-        uint32_t pos = 0U;
-        struct sbk_image_meta_rec_hdr rhdr;
+        struct sbk_image_rec_hdr rhdr;
 
         while (true) {
-                if (sbk_os_slot_read(slot, pos, &rhdr, sizeof(rhdr)) != 0) {
+                if (sbk_os_slot_read(slot, *pos, &rhdr, sizeof(rhdr)) != 0) {
                         goto end;
                 }
 
@@ -37,380 +34,281 @@ int sbk_image_walk_tag(const struct sbk_os_slot *slot, uint16_t tag,
                         goto end;
                 }
 
-                if (rhdr.tag == tag) {
+                if ((rhdr.tag == tag) && (rhdr.len == len)) {
                         break;
                 }
 
-                pos += rhdr.len;
+                *pos += rhdr.len;
         }
 
-        return cb(cb_ctx, pos, rhdr.len);
+        return 0;
 end:
         return -SBK_EC_ENOENT;
 }
 
-struct tagdata_cb_ctx {
-        const struct sbk_os_slot *slot;
-        void *data;
-        uint32_t dsize;
-};
-
-static int tagdata_cb(void *cb_ctx, uint32_t pos, uint16_t rlen)
+static int sbk_image_read_tag_data(const struct sbk_os_slot *slot, uint32_t pos,
+                                   void *data, size_t len)
 {
-        struct tagdata_cb_ctx *ctx = (struct tagdata_cb_ctx *)cb_ctx;
+        return sbk_os_slot_read(slot, pos, data, len);
+}
 
-        if (ctx->dsize != (uint32_t)rlen) {
-                LOG_DBG("TAG has wrong size");
-                return -SBK_EC_ENOENT;
+static int sbk_image_get_tagdata(const struct sbk_os_slot *slot, uint16_t tag,
+                                 void *data, size_t dlen)
+{
+        int rc;
+        uint32_t spos = 0U;
+
+        rc = sbk_image_get_tag_pos(slot, &spos, tag, dlen);
+        if (rc != 0) {
+                goto end;
         }
 
-        return sbk_os_slot_read(ctx->slot, pos, ctx->data, ctx->dsize);
+        return sbk_image_read_tag_data(slot, spos, data, dlen);
+end:
+        return rc;
 }
 
-int sbk_image_get_tag_data(const struct sbk_os_slot *slot, uint16_t tag,
-                           void *data, uint32_t size)
+static int sbk_image_authentic(const struct sbk_os_slot *slot,
+                               const uint8_t *tag, size_t tlen, bool full)
 {
-        const struct tagdata_cb_ctx ctx = {
-                .slot = slot,
-                .data = data,
-                .dsize = size,
-        };
-
-        return sbk_image_walk_tag(slot, tag, tagdata_cb, (void *)&ctx);
-}
-
-struct tagpos_cb_ctx {
-        uint32_t *pos;
-};
-
-static int tagpos_cb(void *cb_ctx, uint32_t pos, uint16_t rlen)
-{
-        struct tagpos_cb_ctx *ctx = (struct tagpos_cb_ctx *)cb_ctx;
-
-        *ctx->pos = pos;
-        return 0;
-}
-
-int sbk_image_get_tag_pos(const struct sbk_os_slot *slot, uint16_t tag,
-                          uint32_t *pos)
-{
-        const struct tagpos_cb_ctx ctx = {
-                .pos = pos,
-        };
-
-        return sbk_image_walk_tag(slot, tag, tagpos_cb, (void *)&ctx);
-}
-
-int sbk_image_get_state(const struct sbk_os_slot *slot, uint32_t cnt,
-                        struct sbk_image_state *state)
-{
-        struct sbk_image_meta_start start;
         int rc;
+        struct sbk_image_meta meta;
+        uint32_t pos, len;
+        uint8_t sbuf[sbk_crypto_auth_state_size()];
+        uint8_t buf[64];
 
-        rc = sbk_image_get_tag_data(slot, SBK_IMAGE_START_TAG, (void *)&start,
-                                    sizeof(start));
+        rc = sbk_image_get_tagdata(slot, SBK_IMAGE_META_TAG, (void *)&meta, sizeof(meta));
         if (rc) {
                 goto end;
         }
 
-        uint16_t state_tag = start.image_state_tag;
+        pos = sizeof(struct sbk_image_auth);
+        len = meta.image_offset - pos;
 
-        while (true) {
-                rc = sbk_image_get_tag_data(slot, state_tag, (void *)state,
-                                            sizeof(struct sbk_image_state));
+        if (full) {
+                len += meta.image_size;
+        }
+
+        sbk_crypto_auth_init(sbuf);
+
+        while (len != 0) {
+                uint32_t rdlen = MIN(len, sizeof(buf));
+
+                rc = sbk_os_slot_read(slot, pos, buf, rdlen);
                 if (rc != 0) {
                         goto end;
                 }
 
-                if (cnt == 0U) {
-                        break;
-                }
+                sbk_crypto_auth_update(sbuf, buf, rdlen);
 
-                state_tag = state->next_tag;
-                cnt--;
+                len -= rdlen;
+                pos += rdlen;
+
         }
 
+        rc = sbk_crypto_auth_final(tag, sbuf);
 end:
+        sbk_crypto_cwipe(sbuf, sizeof(sbuf));
+        SBK_LOG_DBG("Authenticity [%d]", rc);
         return rc;
 }
 
-int sbk_image_digest_verify(const uint8_t *digest,
-                            int (*read_cb)(const void *ctx, uint32_t offset,
-                                           void *data, uint32_t len),
-                            const void *read_cb_ctx, uint32_t image_size)
+int sbk_product_dependency_verify(const struct sbk_os_slot *slot)
 {
-        struct sbk_crypto_se digest_se = {
-                .data = digest,
-        };
-
-        /* verify the hash */
-        return sbk_crypto_digest_verify(&digest_se, read_cb, read_cb_ctx,
-                                        image_size);
-}
-
-struct read_cb_ctx {
-        const struct sbk_os_slot *slot;
-        uint32_t offset;
-};
-
-static int read_cb(const void *ctx, uint32_t offset, void *data, uint32_t len)
-{
-        const struct read_cb_ctx *read = (const struct read_cb_ctx *)ctx;
-
-        return sbk_os_slot_read(read->slot, read->offset + offset, data, len);
-}
-
-int sbk_image_seal_verify(const struct sbk_os_slot *slot)
-{
-        const uint16_t tag = SBK_IMAGE_SEAL_TAG;
-        struct sbk_image_seal seal;
         int rc;
+        struct sbk_image_meta meta;
+        uint16_t tag = SBK_IMAGE_META_TAG;
+        uint32_t dcnt, mcnt;
 
-        rc = sbk_image_get_tag_data(slot, tag, &seal, sizeof(seal));
-        if (rc != 0) {
-                LOG_DBG("SEAL not found");
-                goto end;
-        }
-
-        /* verify the image metadata hash */
-        const struct read_cb_ctx cb_ctx = {
-                .slot = slot,
-        };
-        struct sbk_crypto_se seal_se = {
-                .data = &seal.seal,
-        };
-        uint32_t pos = 0U;
-
-        rc = sbk_image_get_tag_pos(slot, tag, &pos);
-        if (rc != 0) {
-                goto end;
-        }
-
-        /* verify the signature */
-        rc = sbk_crypto_seal_verify(&seal_se, read_cb, (void *)&cb_ctx, pos);
-        if (rc != 0) {
-                LOG_DBG("SIGNATURE invalid");
-        }
-end:
-        return rc;
-}
-
-int sbk_image_pkey_compare(const struct sbk_os_slot *slot, uint8_t *pkey)
-{
-        const uint16_t tag = SBK_IMAGE_SEAL_TAG;
-        struct sbk_image_seal seal;
-        int rc;
-
-        rc = sbk_image_get_tag_data(slot, tag, &seal, sizeof(seal));
-        if (rc != 0) {
-                 goto end;
-        }
-
-        struct sbk_crypto_se seal_se = {
-                .data = &seal.seal,
-        };
-
-        return sbk_crypto_seal_pkey_verify(&seal_se, pkey);
-end:
-        return rc;
-}
-
-int sbk_image_product_verify(const struct sbk_os_slot *slot)
-{
-        const uint16_t tag = SBK_IMAGE_START_TAG;
-        struct sbk_image_meta_start start;
-        uint16_t dep_tag, dep_cnt, dep_match_cnt;
-        int rc;
-
-        rc = sbk_image_get_tag_data(slot, tag, (void *)&start, sizeof(start));
+        rc = sbk_image_get_tagdata(slot, tag, (void *)&meta, sizeof(meta));
         if (rc) {
                 goto end;
         }
 
-        dep_cnt = 0U;
-        dep_match_cnt = 0U;
-        dep_tag = start.product_dep_tag;
+        dcnt = 0U;
+        mcnt = 0U;
+        tag = meta.product_dep_tag;
 
         while (true) {
-                struct sbk_product_dep_info info;
+                struct sbk_product_dep_info di;
                 uint32_t product_hash;
 
-                if (!sbk_image_tag_is_odd_parity(dep_tag)) {
+                if (!sbk_image_tag_is_odd_parity(tag)) {
                         break;
                 }
 
-                rc = sbk_image_get_tag_data(slot, dep_tag, (void *)&info,
-                                            sizeof(info));
+                rc = sbk_image_get_tagdata(slot, tag, (void *)&di, sizeof(di));
                 if (rc != 0) {
                         goto end;
                 }
 
-                dep_cnt++;
-                dep_tag = info.next_tag;
-                product_hash = info.product_hash;
+                dcnt++;
+                tag = di.next_tag;
+                product_hash = di.product_hash;
 
                 if (!sbk_product_hash_match(&product_hash)) {
                         continue;
                 }
 
-                struct sbk_version_range range = info.vrange;
+                struct sbk_version_range range = di.vrange;
                 if (!sbk_product_version_in_range(&range)) {
                         continue;
                 }
 
-                dep_match_cnt++;
+                mcnt++;
         }
 
-        if ((dep_match_cnt == 0U) && (dep_cnt > 0)) {
+        if ((mcnt == 0U) && (dcnt > 0)) {
                 rc = - SBK_EC_EFAULT;
         }
 
 end:
+        SBK_LOG_DBG("Product dependency [%d]", rc);
         return rc;
 }
 
 int sbk_image_dependency_verify(const struct sbk_os_slot *slot)
 {
-        const uint16_t tag = SBK_IMAGE_START_TAG;
-        struct sbk_image_meta_start start;
-        uint16_t dep_tag, dep_cnt, dep_match_cnt;
         int rc;
+        struct sbk_image_meta meta;
+        uint16_t tag;
+        uint32_t dcnt, mcnt;
 
-        rc = sbk_image_get_tag_data(slot, tag, (void *)&start, sizeof(start));
+        rc = sbk_image_get_tagdata(slot, SBK_IMAGE_META_TAG, (void *)&meta,
+                                   sizeof(meta));
         if (rc) {
                 goto end;
         }
 
-        dep_cnt = 0U;
-        dep_match_cnt = 0U;
-        dep_tag = start.image_dep_tag;
+        dcnt = 0U;
+        mcnt = 0U;
+        tag = meta.image_dep_tag;
 
         while (true) {
-                struct sbk_image_dep_info info;
+                struct sbk_image_dep_info di;
 
-                if (!sbk_image_tag_is_odd_parity(dep_tag)) {
+                if (!sbk_image_tag_is_odd_parity(tag)) {
                         break;
                 }
 
-                rc = sbk_image_get_tag_data(slot, dep_tag, (void *)&info,
-                                            sizeof(info));
+                rc = sbk_image_get_tagdata(slot, tag, (void *)&di, sizeof(di));
                 if (rc != 0) {
                         goto end;
                 }
 
-                dep_cnt++;
-                dep_tag = info.next_tag;
+                dcnt++;
+                tag = di.next_tag;
 
-                struct sbk_os_slot dep_slot;
+                struct sbk_os_slot dslot;
+                uint32_t dslt_idx = 0;
 
-                rc = sbk_os_slot_open(&dep_slot, info.run_slot);
-                if (rc != 0) {
-                        goto end;
+                while (true) {
+                        rc = sbk_os_slot_open(&dslot, dslt_idx);
+                        if (rc != 0) {
+                                rc = - SBK_EC_EFAULT;
+                                goto end;
+                        }
+
+                        uint32_t sa = sbk_os_slot_get_sa(&dslot);
+                        uint32_t ea = sa + sbk_os_slot_get_sz(&dslot);
+                        if ((sa <= di.image_start_address) &&
+                            (ea > di.image_start_address)) {
+                                break;
+                        }
+
+                        (void)sbk_os_slot_close(&dslot);
+                        dslt_idx++;
                 }
 
-                rc = sbk_image_get_tag_data(&dep_slot, tag, (void *)&start,
-                                            sizeof(start));
-                if (rc != 0) {
-                        goto end;
-                }
+                rc = sbk_image_get_tagdata(&dslot, SBK_IMAGE_META_TAG,
+                                           (void *)&meta, sizeof(meta));
 
-                (void)sbk_os_slot_close(&dep_slot);
+                (void)sbk_os_slot_close(&dslot);
 
-                if (!sbk_version_in_range(&start.image_version,
-                                          &info.vrange)) {
+                if (!sbk_version_in_range(&meta.image_version, &di.vrange)) {
                         continue;
                 }
 
-                dep_match_cnt++;
+                mcnt++;
         }
 
-        if (dep_match_cnt != dep_cnt) {
+        if (mcnt != dcnt) {
                 rc = - SBK_EC_EFAULT;
         }
 
 end:
+        SBK_LOG_DBG("Image dependency [%d]", rc);
         return rc;
 }
 
-int sbk_image_bootable(uint16_t slot_no, uint32_t *address)
+int sbk_image_bootable(const struct sbk_os_slot *slot, uint32_t *address)
 {
-        struct sbk_os_slot slot;
-        struct sbk_image_state state;
         int rc;
+        struct sbk_image_meta meta;
 
-        rc = sbk_os_slot_open(&slot, slot_no);
-        if (rc != 0) {
-                goto end_noslot;
-        }
-
-        rc = sbk_image_seal_verify(&slot);
-        if (rc != 0) {
-                goto end;
-        }
-
-        rc = sbk_image_get_state(&slot, 0, &state);
-        if (rc != 0) {
-                goto end;
-        }
-
-        if ((state.slot != slot_no) ||
-            (state.state_type != SBK_IMAGE_STATE_BOOTABLE)) {
-                rc = -SBK_EC_EFAULT;
-                goto end;
-        }
-
-        // rc = sbk_image_product_verify(&slot);
-        // if (rc != 0) {
-        //         goto end;
-        // }
-
-        struct sbk_image_digest image_digest;
-
-        rc = sbk_image_get_tag_data(&slot, state.digest_tag, &image_digest,
-                                    sizeof(image_digest));
-        if (rc != 0) {
-                LOG_DBG("HASH not found");
-                goto end;
-        }
-
-        const struct read_cb_ctx cb_ctx = {
-                .slot = &slot,
-                .offset = state.offset,
-        };
-        const uint8_t *dig = (const uint8_t *)&image_digest.digest;
-
-        rc = sbk_image_digest_verify(dig, read_cb, (void *)&cb_ctx, state.size);
-        if (rc != 0) {
-                goto end;
-        }
-
-        *address = slot.get_start_address(slot.ctx) + state.offset;
-end:
-        (void)sbk_os_slot_close(&slot);
-end_noslot:
-        return rc;
-}
-
-int sbk_image_get_version(uint16_t slot_no, struct sbk_version *version)
-{
-        const uint16_t tag = SBK_IMAGE_START_TAG;
-        struct sbk_os_slot slot;
-        struct sbk_image_meta_start start;
-        int rc;
-
-        rc = sbk_os_slot_open(&slot, slot_no);
-        if (rc != 0) {
-                goto end_noslot;
-        }
-
-        rc = sbk_image_get_tag_data(&slot, tag, (void *)&start, sizeof(start));
+        rc = sbk_image_get_tagdata(slot, SBK_IMAGE_META_TAG, (void *)&meta,
+                                   sizeof(meta));
         if (rc) {
                 goto end;
         }
 
-        memcpy(version, &start.image_version, sizeof(struct sbk_version));
+        uint32_t sa = sbk_os_slot_get_sa(slot);
+        uint32_t se = sa + sbk_os_slot_get_sz(slot);
+
+        if ((meta.image_start_address < sa) ||
+            (meta.image_start_address >= se)) {
+                rc = -SBK_EC_EFAULT;
+                goto end;
+        }
+
+        rc = sbk_product_dependency_verify(slot);
+        if (rc != 0) {
+                goto end;
+        }
+
+        rc = sbk_image_dependency_verify(slot);
+        if (rc != 0) {
+                goto end;
+        }
+
+        struct sbk_image_auth auth;
+
+        rc = sbk_image_get_tagdata(slot, SBK_IMAGE_AUTH_TAG, (void *)&auth,
+                                   sizeof(auth));
+        if (rc != 0) {
+                goto end;
+        }
+
+        rc = sbk_image_authentic(slot, &auth.fsl_fhmac[0], 32, true);
+        if (rc != 0) {
+                goto end;
+        }
+
+        *address = meta.image_start_address;
 end:
-        (void)sbk_os_slot_close(&slot);
-end_noslot:
+        SBK_LOG_DBG("Booteable [%d]", rc);
         return rc;
+}
+
+int sbk_image_get_version(const struct sbk_os_slot *slot,
+                          struct sbk_version *version)
+{
+        struct sbk_image_meta meta;
+        int rc;
+
+        rc = sbk_image_get_tagdata(slot, SBK_IMAGE_META_TAG, (void *)&meta,
+                                   sizeof(meta));
+        if (rc != 0) {
+                goto end;
+        }
+
+        memcpy(version, &meta.image_version, sizeof(struct sbk_version));
+end:
+        return rc;
+}
+
+int sbk_image_swap(const struct sbk_os_slot *in, const struct sbk_os_slot *out,
+                   const struct sbk_os_slot *im)
+{
+        return 0;
 }

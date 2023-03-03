@@ -15,12 +15,9 @@ file(READ "${ROOT_DIR}/VERSION" SBOOTKIT_VERSION)
 # Path to sdkboot library
 set(SBOOTKIT_DIR "${ROOT_DIR}/lib")
 assert_exists(SBOOTKIT_DIR)
-# Path to tinycrypt library source subdirectory of root.
-set(TINYCRYPT_DIR "${ROOT_DIR}/ext/tinycrypt/lib")
-assert_exists(TINYCRYPT_DIR)
-# Path to kvs library source subdirectory of root.
-set(KVS_DIR "${ROOT_DIR}/ext/kvs/lib")
-assert_exists(KVS_DIR)
+# Path to mincrypt library source subdirectory of root.
+set(MINCRYPT_DIR "${ROOT_DIR}/ext/mincrypt")
+assert_exists(MINCRYPT_DIR)
 
 if(CONFIG_SBK)
 
@@ -35,17 +32,12 @@ zephyr_library_sources(
     ${SBOOTKIT_DIR}/src/sbk_os.c
 )
 
-zephyr_include_directories_ifdef(CONFIG_SBK_TINYCRYPT
-    ${TINYCRYPT_DIR}/include
+zephyr_include_directories_ifdef(CONFIG_SBK_MINCRYPT
+    ${MINCRYPT_DIR}/include
 )
-zephyr_library_sources_ifdef(CONFIG_SBK_TINYCRYPT
-    ${TINYCRYPT_DIR}/source/utils.c
-    ${TINYCRYPT_DIR}/source/sha256.c
-    ${TINYCRYPT_DIR}/source/ecc.c
-    ${TINYCRYPT_DIR}/source/ecc_dh.c
-    ${TINYCRYPT_DIR}/source/ecc_dsa.c
-    ${TINYCRYPT_DIR}/source/aes_encrypt.c
-    ${TINYCRYPT_DIR}/source/aes_decrypt.c
+zephyr_library_sources_ifdef(CONFIG_SBK_MINCRYPT
+    ${MINCRYPT_DIR}/src/crypto_chacha20poly1305.c
+    ${MINCRYPT_DIR}/src/crypto_sha256.c
 )
 
 zephyr_compile_definitions(CONFIG_SBK_OS_INCLUDE=zephyr_os_config.h)

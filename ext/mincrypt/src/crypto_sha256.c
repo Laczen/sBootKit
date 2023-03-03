@@ -15,6 +15,12 @@ static void crypto_wipe(void *secret, size_t size)
 // SHA256 //
 ////////////
 
+typedef struct {
+	uint64_t count;
+	uint8_t buf[64];
+	uint32_t state[8];
+} crypto_sha256_ctx;
+
 // Cyclic right rotation.
 #define ROTR32(x, y)  (((x) >> (y)) ^ ((x) << (32 - (y))))
 #define SHR(x, y) ((x) >> (y))
@@ -96,11 +102,23 @@ static void sha256_transform(crypto_sha256_ctx *ctx)
         ctx->state[7] += H;
 }
 
-void crypto_sha256_init(crypto_sha256_ctx *ctx)
+size_t crypto_sha256_state_size(void)
 {
-        if (ctx == NULL) {
+        return sizeof(crypto_sha256_ctx);
+}
+
+size_t crypto_sha256_block_size(void)
+{
+        return CRYPTO_SHA256_BLOCKSIZE;
+}
+
+void crypto_sha256_init(void *state)
+{
+        if (state == NULL) {
                 return;
         }
+
+        crypto_sha256_ctx *ctx = (crypto_sha256_ctx *)state;
 
         ctx->state[0] = 0x6a09e667;
         ctx->state[1] = 0xbb67ae85;
@@ -113,10 +131,11 @@ void crypto_sha256_init(crypto_sha256_ctx *ctx)
         ctx->count = 0U;
 }
 
-void crypto_sha256_update(crypto_sha256_ctx *ctx, const void *in, size_t inlen)
+void crypto_sha256_update(void *state, const void *in, size_t inlen)
 {
-        int i = (int) (ctx->count & 63);
         const uint8_t* p = (const uint8_t*)in;
+        crypto_sha256_ctx *ctx = (crypto_sha256_ctx *)state;
+        int i = (int) (ctx->count & 63);
 
         ctx->count += inlen;
 
@@ -129,8 +148,9 @@ void crypto_sha256_update(crypto_sha256_ctx *ctx, const void *in, size_t inlen)
         }
 }
 
-void crypto_sha256_final(void *out, crypto_sha256_ctx *ctx)
+void crypto_sha256_final(void *out, void *state)
 {
+        crypto_sha256_ctx *ctx = (crypto_sha256_ctx *)state;
         uint8_t *p = (uint8_t *)out;
         uint64_t cnt = ctx->count * 8;
         int i;
@@ -159,27 +179,43 @@ void crypto_sha256_final(void *out, crypto_sha256_ctx *ctx)
 /* Convenience function */
 void crypto_sha256(void *out, const void *in, size_t inlen)
 {
-        crypto_sha256_ctx ctx;
+        uint8_t state[sizeof(crypto_sha256_ctx)];
 
-        crypto_sha256_init(&ctx);
-        crypto_sha256_update(&ctx, in, inlen);
-        crypto_sha256_final(out, &ctx);
+        crypto_sha256_init(state);
+        crypto_sha256_update(state, in, inlen);
+        crypto_sha256_final(out, state);
 }
 
 /////////////////
 // SHA256-HMAC //
 /////////////////
-void crypto_hmac_sha256_init(crypto_hmac_sha256_ctx *ctx, const void *key,
-                             size_t keylen)
+
+typedef struct {
+	uint8_t sha256_state[sizeof(crypto_sha256_ctx)];
+	uint8_t key[64];
+} crypto_hmac_sha256_ctx;
+
+size_t crypto_hmac_sha256_state_size(void)
+{
+        return sizeof(crypto_hmac_sha256_ctx);
+}
+
+size_t crypto_hmac_sha256_block_size(void)
+{
+        return CRYPTO_HMAC_SHA256_BLOCKSIZE;
+}
+
+void crypto_hmac_sha256_init(void *state, const void *key, size_t keylen)
 {
         int i;
-        crypto_sha256_ctx *sha256_ctx = &(ctx->sha256_ctx);
+        crypto_hmac_sha256_ctx *ctx = (crypto_hmac_sha256_ctx *)state;
+        uint8_t *sha256_state = ctx->sha256_state;
 
         /* Prepare the inner hash key block, hash the key if it's too long. */
         if (keylen > 64) {
-                crypto_sha256_init(sha256_ctx);
-                crypto_sha256_update(sha256_ctx, key, keylen);
-                crypto_sha256_final(ctx->key, sha256_ctx);
+                crypto_sha256_init(sha256_state);
+                crypto_sha256_update(sha256_state, key, keylen);
+                crypto_sha256_final(ctx->key, sha256_state);
 
                 for (i = 0; i < 32; ++i) {
                         ctx->key[i] ^= 0x36;
@@ -198,30 +234,33 @@ void crypto_hmac_sha256_init(crypto_hmac_sha256_ctx *ctx, const void *key,
         }
 
         /* Initialize the inner hash with the key block. */
-        crypto_sha256_init(sha256_ctx);
-        crypto_sha256_update(sha256_ctx, ctx->key, 64);
+        crypto_sha256_init(sha256_state);
+        crypto_sha256_update(sha256_state, ctx->key, 64);
 
         /* Set the opad to its final value */
         for (i = 0; i < 64; ++i) {
                 ctx->key[i] ^= (0x36 ^ 0x5c);
         }
 }
-void crypto_hmac_sha256_update(crypto_hmac_sha256_ctx *ctx, const void *in,
-                               size_t inlen)
-{
-        crypto_sha256_ctx *sha256_ctx = &(ctx->sha256_ctx);
 
-        crypto_sha256_update(sha256_ctx, in, inlen);
+void crypto_hmac_sha256_update(void *state, const void *in, size_t inlen)
+{
+        crypto_hmac_sha256_ctx *ctx = (crypto_hmac_sha256_ctx *)state;
+        uint8_t *sha256_state = ctx->sha256_state;
+
+        crypto_sha256_update(sha256_state, in, inlen);
 }
-void crypto_hmac_sha256_final(void *out, crypto_hmac_sha256_ctx *ctx)
-{
-        crypto_sha256_ctx *sha256_ctx = &(ctx->sha256_ctx);
 
-        crypto_sha256_final(out, sha256_ctx);
-        crypto_sha256_init(sha256_ctx);
-        crypto_sha256_update(sha256_ctx, ctx->key, 64);
-        crypto_sha256_update(sha256_ctx, out, 32);
-        crypto_sha256_final(out, sha256_ctx);
+void crypto_hmac_sha256_final(void *out, void *state)
+{
+        crypto_hmac_sha256_ctx *ctx = (crypto_hmac_sha256_ctx *)state;
+        uint8_t *sha256_state = ctx->sha256_state;
+
+        crypto_sha256_final(out, sha256_state);
+        crypto_sha256_init(sha256_state);
+        crypto_sha256_update(sha256_state, ctx->key, 64);
+        crypto_sha256_update(sha256_state, out, 32);
+        crypto_sha256_final(out, sha256_state);
         crypto_wipe(ctx, sizeof(crypto_hmac_sha256_ctx));
 }
 
@@ -229,16 +268,20 @@ void crypto_hmac_sha256_final(void *out, crypto_hmac_sha256_ctx *ctx)
 void crypto_hmac_sha256(void *out, const void *key, size_t keylen,
                         const void *in, size_t inlen)
 {
-        crypto_hmac_sha256_ctx ctx;
+        uint8_t hmac_state[sizeof(crypto_hmac_sha256_ctx)];
 
-        crypto_hmac_sha256_init(&ctx, key, keylen);
-        crypto_hmac_sha256_update(&ctx, in, inlen);
-        crypto_hmac_sha256_final(out, &ctx);
+        crypto_hmac_sha256_init(hmac_state, key, keylen);
+        crypto_hmac_sha256_update(hmac_state, in, inlen);
+        crypto_hmac_sha256_final(out, hmac_state);
 }
 
 /////////////////
 // HKDF-SHA256 //
 /////////////////
+size_t crypto_hkdf_sha256_prk_size(void) {
+        return CRYPTO_HMAC_SHA256_BLOCKSIZE;
+}
+
 void crypto_hkdf_sha256_extract(void *prk, const void *salt, size_t saltlen,
                                 const void *key, size_t keylen)
 {
@@ -253,16 +296,17 @@ void crypto_hkdf_sha256_expand(void *out, const void *prk, const void *lbl,
         uint8_t t[32];
 
         while (1) {
-                crypto_hmac_sha256_ctx ctx;
 
-                crypto_hmac_sha256_init(&ctx, prk, 32);
+                uint8_t hmac_state[sizeof(crypto_hmac_sha256_ctx)];
+
+                crypto_hmac_sha256_init(hmac_state, prk, 32);
                 if (cnt != 0) {
-                        crypto_hmac_sha256_update(&ctx, t, 32);
+                        crypto_hmac_sha256_update(hmac_state, t, 32);
                 }
                 cnt++;
-                crypto_hmac_sha256_update(&ctx, lbl, lbllen);
-                crypto_hmac_sha256_update(&ctx, &cnt, 1);
-                crypto_hmac_sha256_final(t, &ctx);
+                crypto_hmac_sha256_update(hmac_state, lbl, lbllen);
+                crypto_hmac_sha256_update(hmac_state, &cnt, 1);
+                crypto_hmac_sha256_final(t, hmac_state);
                 for (int i = 0; ((i < 32) && (i < len)); ++i) {
                         out8[32 * (cnt - 1) + i] = t[i];
                 }
@@ -282,7 +326,7 @@ void crypto_hkdf_sha256(void *out, const void *salt, size_t saltlen,
                         const void *key, size_t keylen, const void *lbl,
                         size_t lbllen, size_t len)
 {
-        uint8_t prk[64];
+        uint8_t prk[32];
 
         crypto_hkdf_sha256_extract(prk, salt, saltlen, key, keylen);
         crypto_hkdf_sha256_expand(out, prk, lbl, lbllen, len);

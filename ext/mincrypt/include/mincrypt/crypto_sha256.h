@@ -16,8 +16,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define CRYPTO_SHA256_BLOCKSIZE 32
-
 #if defined(__cplusplus)
 extern "C" {
 #endif
@@ -25,15 +23,13 @@ extern "C" {
 ///////////
 // SHA26 //
 ///////////
-typedef struct {
-	uint64_t count;
-	uint8_t buf[64];
-	uint32_t state[8];
-} crypto_sha256_ctx;
+#define CRYPTO_SHA256_BLOCKSIZE 32
 
-void crypto_sha256_init(crypto_sha256_ctx *ctx);
-void crypto_sha256_update(crypto_sha256_ctx *ctx, const void *in, size_t inlen);
-void crypto_sha256_final(void *out, crypto_sha256_ctx *ctx);
+size_t crypto_sha256_state_size(void);
+size_t crypto_sha256_block_size(void);
+void crypto_sha256_init(void *state);
+void crypto_sha256_update(void *state, const void *in, size_t inlen);
+void crypto_sha256_final(void *out, void *state);
 
 // Convenience method.
 void crypto_sha256(void *out, const void *in, size_t inlen);
@@ -41,16 +37,13 @@ void crypto_sha256(void *out, const void *in, size_t inlen);
 ////////////////
 // HMAC-SHA26 //
 ////////////////
-typedef struct {
-	crypto_sha256_ctx sha256_ctx;
-	uint8_t key[64];
-} crypto_hmac_sha256_ctx;
+#define CRYPTO_HMAC_SHA256_BLOCKSIZE 32
 
-void crypto_hmac_sha256_init(crypto_hmac_sha256_ctx *ctx, const void *key,
-			     size_t keylen);
-void crypto_hmac_sha256_update(crypto_hmac_sha256_ctx *ctx, const void *in,
-			       size_t inlen);
-void crypto_hmac_sha256_final(void *out, crypto_hmac_sha256_ctx *ctx);
+size_t crypto_hmac_sha256_state_size(void);
+size_t crypto_hmac_sha256_block_size(void);
+void crypto_hmac_sha256_init(void *state, const void *key, size_t keylen);
+void crypto_hmac_sha256_update(void *state, const void *in, size_t inlen);
+void crypto_hmac_sha256_final(void *out, void *state);
 
 // Convenience method.
 void crypto_hmac_sha256(void *out, const void *key, size_t keylen,
@@ -59,6 +52,7 @@ void crypto_hmac_sha256(void *out, const void *key, size_t keylen,
 ////////////////
 // HKDF-SHA26 //
 ////////////////
+size_t crypto_hkdf_sha256_prk_size(void);
 void crypto_hkdf_sha256_extract(void *prk, const void *salt, size_t saltlen,
 				const void *key, size_t keylen);
 void crypto_hkdf_sha256_expand(void *out, const void *prk, const void *lbl,

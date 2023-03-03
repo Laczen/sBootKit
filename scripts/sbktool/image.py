@@ -25,19 +25,17 @@ import hashlib
 import struct
 import os.path
 import sbktool.keys as keys
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
 
-BYTE_ALIGNMENT = 32 # Output hex file is aligned to BYTE_ALIGNMENT
-SBK_IMAGE_META_START_TAG = 0x8000
-SBK_IMAGE_META_SEAL_TAG = 0x7FFF
-SBK_IMAGE_STATE_BOOTABLE = 0x0080
-SBK_IMAGE_STATE_ENCRYPTED = 0x8081
-SBK_IMAGE_STATE_ZIPPED = 0x8082
-SBK_IMAGE_HASH_TYPE_SHA256 = 0x0080
-SBK_IMAGE_SEAL_TYPE_EDSA256 = 0x0080
+from Crypto.Random import get_random_bytes
+from Crypto.Hash import SHA256, HMAC
+from Crypto.Protocol.KDF import HKDF
+from Crypto.Cipher import ChaCha20
+
+SBK_IMAGE_META_TAG = 0x8000
+SBK_IMAGE_AUTH_TAG = 0x7FFF
+SBK_SALT_SIZE = 16
+SBK_HMAC_SIZE = 32
+ldr_context = b"sbk1.0 LOAD"
 
 INTEL_HEX_EXT = "hex"
 STRUCT_ENDIAN_DICT = {
@@ -46,31 +44,26 @@ STRUCT_ENDIAN_DICT = {
 }
 
 class Image():
-    def __init__(self, hdrsize = None, run_slot = None, download_slot = None,
-                 version = 0, endian='little', type = 'image', offset = None,
-                 product_dep = None, image_dep = None):
+    def __init__(self, align = 1, hdrsize = None, version = 0, image_dep = None,
+                 product_dep = None, endian = 'little', type = 'image'):
         self.hdrsize = hdrsize
-        self.offset = offset
-        self.run_slot = run_slot or 0
-        self.download_slot = download_slot
+        self.align = align
         self.version = version or versmod.decode_version("0")
-        self.endian = endian
         self.payload = []
-        self.size = 0
         self.product_dep = product_dep
         self.image_dep = image_dep
-        self.image_dep.append(
-            (self.run_slot, (versmod.decode_version("0"), self.version))
-        )
-        self.meta_cnt = 0
+        self.endian = endian
+        self.metacnt = 0
+        self.salt = get_random_bytes(SBK_SALT_SIZE)
+        self.fsl_fhmac = bytearray([0] * SBK_HMAC_SIZE)
+        self.ldr_shmac = bytearray([0] * SBK_HMAC_SIZE)
+        self.ldr_fhmac = bytearray([0] * SBK_HMAC_SIZE)
 
     def __repr__(self):
-        return "<hdrsize={}, run_slot={}, download_slot={}, \
-                Image version={}, endian={}, type={} format={}, \
-                payloadlen=0x{:x}>".format(
+        return "<align={}, hdrsize={}, Image version={}, endian={}, type={}, \
+                 format={}, payloadlen=0x{:x}>".format(
+                    self.align,
                     self.hdrsize,
-                    self.run_slot,
-                    self.download_slot,
                     self.version,
                     self.endian,
                     self.type,
@@ -78,15 +71,22 @@ class Image():
                     len(self.payload))
 
     def get_tag(self):
-        self.meta_cnt += 1
-        value = self.meta_cnt & 0x7FFF
+        self.metacnt += 1
+        value = self.metacnt & 0x7FFF
         value ^= value >> 8
         value ^= value >> 4
         value &= 0xf
         if ((0x6996 >> value) & 1) == 0:
-            return self.meta_cnt | 0x8000
+            return self.metacnt | 0x8000
 
-        return self.meta_cnt
+        return self.metacnt
+
+    def check(self):
+        """Perform some sanity checking of the image."""
+        # Check that image starts with header of all 0x00.
+        if any(v != 0x00 for v in self.payload[0:self.hdrsize]):
+            raise Exception("Header size provided, but image does not \
+            start with 0x00")
 
     def load(self, path):
         """Load an image from a given file"""
@@ -96,21 +96,15 @@ class Image():
 
         ih = IntelHex(path)
         self.payload = ih.tobinarray()
-        if self.offset is None:
-            self.offset = ih.minaddr();
+        self.offset = ih.minaddr();
 
         # Padding the payload to aligned size
-        if (len(self.payload) % BYTE_ALIGNMENT) != 0:
-            padding = BYTE_ALIGNMENT - len(self.payload) % BYTE_ALIGNMENT
-            self.payload = bytes(self.payload) + (b'\xff' * padding)
+        padlen = self.align - len(self.payload) % self.align
+        if (padlen != self.align):
+            padding = get_random_bytes(padlen)
+            self.payload = bytes(self.payload) + padding
 
-        if self.run_slot == None:
-            self.run_slot = 0;
-
-        if self.download_slot == None:
-            self.download_slot = 0;
-
-        self.size = len(self.payload) - self.hdrsize;
+        self.payload = bytearray(self.payload)
         self.check()
 
     def save(self, path):
@@ -124,58 +118,30 @@ class Image():
         h.frombytes(bytes=self.payload, offset = self.offset)
         h.tofile(path, 'hex')
 
-    def check(self):
-        """Perform some sanity checking of the image."""
-        # Check that image starts with header of all 0x00.
-        if any(v != 0x00 for v in self.payload[0:self.hdrsize]):
-            raise Exception("Header size provided, but image does not \
-            start with 0x00")
-
-    def create(self, signkey, encrkey):
-
-        # Calculate the image hash.
-        sha = hashlib.sha256()
-        sha.update(self.payload[self.hdrsize:])
-        hash = sha.digest()
-        epubk = None
-        ehash = None
-
-        if encrkey is not None:
-
-            # Generate new encryption key
-            tempkey = keys.EC256P1.generate()
-            epubk = tempkey.get_public_key_bytearray()
-
-            # Generate shared secret
-            shared_secret = tempkey.gen_shared_secret(encrkey._get_public())
-
-            # Key Derivation function: KDF1
-            sha = hashlib.sha256()
-            sha.update(shared_secret)
-            sha.update(b'\x00\x00\x00\x00')
-            plainkey = sha.digest()[:16]
-
-            # Encrypt
-            nonce = sha.digest()[16:]
-            cipher = Cipher(algorithms.AES(plainkey), modes.CTR(nonce),
-                            backend=default_backend())
-            encryptor = cipher.encryptor()
-            msg = bytes(self.payload[self.hdrsize:])
-
-            enc = encryptor.update(msg) + encryptor.finalize()
-            self.payload = bytearray(self.payload)
-            self.payload[self.hdrsize:] = enc
-
-            # Calculate the encrypted image hash.
-            sha = hashlib.sha256()
-            sha.update(self.payload[self.hdrsize:])
-            ehash = sha.digest()
-
-        self.add_header(hash, epubk, ehash, signkey)
-
-    def add_header(self, hash, epubk, ehash, signkey):
-        """Install the image header."""
+    def add_auth(self):
         e = STRUCT_ENDIAN_DICT[self.endian]
+        auth_fmt = (e +
+            'HH' +  # rec_tag + rec_len
+            '32s' +    # fsl_fhmac
+            '32s' +    # ldr_shamc
+            '32s'      # ldr_fhmac
+        )
+
+        auth = struct.pack(auth_fmt,
+            SBK_IMAGE_AUTH_TAG, struct.calcsize(auth_fmt),
+            self.fsl_fhmac,
+            self.ldr_shmac,
+            self.ldr_fhmac
+        )
+
+        self.payload[0:len(auth)] = auth
+        return len(auth)
+
+    def add_meta(self, offset):
+        self.image_dep.append((
+            self.offset + self.hdrsize,
+            (versmod.decode_version("0"), self.version)
+        ))
 
         image_dep_tag = []
         for entry in self.image_dep:
@@ -185,44 +151,53 @@ class Image():
         for entry in self.product_dep:
             product_dep_tag.append(self.get_tag())
         product_dep_tag.append(0)
-        image_state_tag = [self.get_tag()]
-        image_hash_tag = [self.get_tag()]
 
-        start_fmt = (e +
+        e = STRUCT_ENDIAN_DICT[self.endian]
+        meta_fmt = (e +
             'HH' +  # rec_tag + rec_len
             'BBH' + # Image version
+            'I' +   # Image start address
+            'I' +   # Image flags
+            'I' +   # Image size
+            'H' +   # Image offset
             'H' +   # Image dep tag
             'H' +   # Board dep tag
-            'H' +   # Image state tag
-            'H'     # Next tag (set to 0x7FFF)
+            'H' +   # Other tag
+            '16s'  # salt
         )
-        hdr = struct.pack(start_fmt,
-            SBK_IMAGE_META_START_TAG, struct.calcsize(start_fmt),
+        info = struct.pack(meta_fmt,
+            SBK_IMAGE_META_TAG, struct.calcsize(meta_fmt),
             self.version.major or 0, self.version.minor or 0, self.version.revision or 0,
+            self.offset + self.hdrsize,
+            0,
+            len(self.payload) - self.hdrsize,
+            self.hdrsize,
             image_dep_tag[0],
             product_dep_tag[0],
-            image_state_tag[0],
-            0x7FFF,
+            0,
+            self.salt,
         )
 
         image_dep_fmt = (e +
             'HH' +  # rec_tag + rec_len
             'BBH' + # minimum version
             'BBH' + # maximum version
-            'H' +   # run slot
-            'H'     # next image dependency tag
+            'I' +   # image start address
+            'H' +   # next image dependency tag
+            'H'     # pad16
         )
 
         n = 0
         for image_dep in self.image_dep:
-            rslot = image_dep[0]
+            address = image_dep[0]
             vrange = image_dep[1]
-            hdr += struct.pack(image_dep_fmt,
+            info += struct.pack(image_dep_fmt,
                 image_dep_tag[n], struct.calcsize(image_dep_fmt),
                 vrange[0].major, vrange[0].minor, vrange[0].revision,
                 vrange[1].major, vrange[1].minor, vrange[1].revision,
-                rslot,
-                image_dep_tag[n + 1]
+                address,
+                image_dep_tag[n + 1],
+                0
             )
             n = n + 1
 
@@ -239,7 +214,7 @@ class Image():
         for product_dep in self.product_dep:
             product_hash = product_dep[0]
             vrange = product_dep[1]
-            hdr += struct.pack(product_dep_fmt,
+            info += struct.pack(product_dep_fmt,
                 product_dep_tag[n], struct.calcsize(product_dep_fmt),
                 vrange[0].major, vrange[0].minor, vrange[0].revision,
                 vrange[1].major, vrange[1].minor, vrange[1].revision,
@@ -249,63 +224,38 @@ class Image():
             )
             n = n + 1
 
-        image_state_fmt = (e +
-            'HH' +  # rec_tag + rec_len
-            'H' +   # slot
-            'H' +   # offset
-            'I' +   # size
-            'H' +   # state type
-            'H' +   # hash tag
-            'H' +   # transform tag
-            'H'     # next image state tag
-        )
-        hdr += struct.pack(image_state_fmt,
-            image_state_tag[0], struct.calcsize(image_state_fmt),
-            self.run_slot,
-            self.hdrsize,
-            len(self.payload) - self.hdrsize,
-            SBK_IMAGE_STATE_BOOTABLE,
-            image_hash_tag[0],
-            0,
-            0
-        )
+        if len(info) > (self.hdrsize - offset):
+            raise Exception("Header size to small to fit meta data")
 
-        image_hash_fmt = (e +
-            'HH' +  # rec_tag + rec_len
-            'H' +   # type
-            'H'     # pad16
-        )
-        hdr += struct.pack(image_hash_fmt,
-            image_hash_tag[0], struct.calcsize(image_hash_fmt) + len(hash),
-            SBK_IMAGE_HASH_TYPE_SHA256,
-            0
-        )
-        hdr += hash
+        info = info + bytearray([0] * (self.hdrsize - offset - len(info)))
+        self.payload[offset:self.hdrsize] = info
+        return len(info)
 
-        if ((epubk is not None) and (ehash is not None)):
-            print("TODO add encryption")
+    def show(self, data):
+        print('\\x' + '\\x'.join(format(x, '02x') for x in data))
 
-        sha = hashlib.sha256()
-        sha.update(hdr)
-        seal_msg = sha.digest()
-        seal_pubk = signkey.get_public_key_bytearray()
-        seal_sign = signkey.sign_prehashed(seal_msg)
-        seal_len = len(seal_pubk) + len(seal_sign)
-        image_seal_fmt = (e +
-            'HH' +  # rec_tag + rec_len
-            'H' +   # type
-            'H'     # pad16
-        )
-        hdr += struct.pack(image_seal_fmt,
-            SBK_IMAGE_META_SEAL_TAG, struct.calcsize(image_seal_fmt) + seal_len,
-            SBK_IMAGE_SEAL_TYPE_EDSA256,
-            0
-        )
-        hdr += seal_pubk
-        hdr += seal_sign
+    def create(self, bootkey, loadkey, encrypt):
 
-        if len(hdr) > self.hdrsize:
-            raise Exception("Header to small to fit metadata")
+        meta_offset = self.add_auth()
+        self.add_meta(meta_offset)
 
-        self.payload = bytearray(self.payload)
-        self.payload[0:len(hdr)] = hdr
+        h = HMAC.new(bootkey.get_private_key_bytearray(), digestmod=SHA256)
+        h.update(self.payload[meta_offset:])
+        self.fsl_fhmac = h.digest()
+
+        h = HMAC.new(loadkey.get_private_key_bytearray(), digestmod=SHA256)
+        h.update(self.payload[meta_offset:self.hdrsize])
+        self.ldr_shmac = h.digest()
+
+        if encrypt:
+            km = HKDF(loadkey.get_private_key_bytearray(), 44, self.salt, SHA256, 1, ldr_context)
+            cipher = ChaCha20.new(key=km[0:32], nonce=km[32:44])
+            self.payload[self.hdrsize:]=cipher.encrypt(self.payload[self.hdrsize:])
+
+        h = HMAC.new(loadkey.get_private_key_bytearray(), digestmod=SHA256)
+        h.update(self.payload[meta_offset:])
+        self.ldr_fhmac = h.digest()
+
+        self.add_auth()
+
+

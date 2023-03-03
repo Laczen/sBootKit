@@ -8,6 +8,10 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
 project(sFSL)
 
+zephyr_include_directories(
+    ${CMAKE_CURRENT_LIST_DIR}/include
+)
+
 zephyr_library_sources_ifdef(CONFIG_ARM
     ./src/arm_jump.c
 )

@@ -22,7 +22,7 @@ struct arm_vector_table {
     uint32_t reset;
 };
 
-void jump_image(uint32_t address)
+void jump_image(unsigned long address)
 {
         struct arm_vector_table {
                 uint32_t msp;

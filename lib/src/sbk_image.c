@@ -209,8 +209,8 @@ int sbk_image_dependency_verify(const struct sbk_os_slot *slot)
                                 goto end;
                         }
 
-                        uint32_t sa = sbk_os_slot_get_sa(&dslot);
-                        uint32_t ea = sa + sbk_os_slot_get_sz(&dslot);
+                        unsigned long sa = sbk_os_slot_get_sa(&dslot);
+                        unsigned long ea = sa + sbk_os_slot_get_sz(&dslot);
                         if ((sa <= di.image_start_address) &&
                             (ea > di.image_start_address)) {
                                 break;
@@ -241,7 +241,7 @@ end:
         return rc;
 }
 
-int sbk_image_bootable(const struct sbk_os_slot *slot, uint32_t *address)
+int sbk_image_bootable(const struct sbk_os_slot *slot, unsigned long *address)
 {
         int rc;
         struct sbk_image_meta meta;
@@ -252,8 +252,8 @@ int sbk_image_bootable(const struct sbk_os_slot *slot, uint32_t *address)
                 goto end;
         }
 
-        uint32_t sa = sbk_os_slot_get_sa(slot);
-        uint32_t se = sa + sbk_os_slot_get_sz(slot);
+        unsigned long sa = sbk_os_slot_get_sa(slot);
+        unsigned long se = sa + sbk_os_slot_get_sz(slot);
 
         if ((meta.image_start_address < sa) ||
             (meta.image_start_address >= se)) {

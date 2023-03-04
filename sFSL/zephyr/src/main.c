@@ -125,7 +125,7 @@ static int slot_init(struct sbk_os_slot *slot, unsigned int slot_no)
 }
 
 int (*sbk_os_slot_init)(struct sbk_os_slot *slot, unsigned int slot_no) = slot_init;
-extern void jump_image(uint32_t address);
+extern void jump_image(unsigned long address);
 struct sbk_shared_data shared_data Z_GENERIC_SECTION(BL_SHARED_SRAM);
 
 void main(void)

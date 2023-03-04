@@ -104,4 +104,4 @@ size_t sbk_os_slot_get_sz(const struct sbk_os_slot *slot);
 } /* extern "C" */
 #endif
 
-#endif /* SBK_H_ */
+#endif /* SBK_OS_H_ */

@@ -98,7 +98,7 @@ int sbk_image_dependency_verify(const struct sbk_os_slot *slot);
  * @param slot: slot that contains the image
  * @param address: is updated with the jump address if the image is bootable
  */
-int sbk_image_bootable(const struct sbk_os_slot *slot, uint32_t *address);
+int sbk_image_bootable(const struct sbk_os_slot *slot, unsigned long *address);
 
 /**
  * @brief sbk_image_get_version

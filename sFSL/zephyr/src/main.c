@@ -155,7 +155,7 @@ void main(void)
                 shared_data.bcnt = 0U;
         }
 
-        uint32_t address;
+        unsigned long address;
         int rc;
 
         for (uint32_t i = 0; i < ARRAY_SIZE(slots); i++) {

@@ -34,22 +34,17 @@ static int sbk_crypto_compare(const void *res, const void *exp, size_t len)
         return rc;
 }
 
-int sbk_crypto_kxch_init(void *prk, unsigned int key_idx, const uint8_t *salt,
-                          size_t salt_size)
+void sbk_crypto_kxch_init(void *prk, const void *salt, size_t salt_size)
 {
-        if (key_idx > 0) {
-                return 1;
-        }
         crypto_hkdf_sha256_extract(prk, salt, salt_size, SBK_PRIV_KEY,
                                    sizeof(SBK_PRIV_KEY) - 1);
-        return 0;
 }
 
-void sbk_crypto_kxch_final(void *keymaterial, void *prk, const uint8_t *context,
-                           size_t context_size)
+void sbk_crypto_kxch_final(void *keymaterial, const void *prk,
+                           const void *context, size_t context_size)
 {
         crypto_hkdf_sha256_expand(keymaterial, prk, context, context_size,
-                                  SBK_CRYPTO_KM_BUF_SIZE);
+                                  SBK_CRYPTO_KXCH_KM_SIZE);
 }
 
 size_t sbk_crypto_auth_state_size(void)
@@ -57,12 +52,12 @@ size_t sbk_crypto_auth_state_size(void)
         return crypto_hmac_sha256_state_size();
 }
 
-void sbk_crypto_auth_init(void *state)
+void sbk_crypto_auth_init(void *state, const void *key, size_t key_size)
 {
-        crypto_hmac_sha256_init(state, SBK_PRIV_KEY, sizeof(SBK_PRIV_KEY) - 1);
+        crypto_hmac_sha256_init(state, key, key_size);
 }
 
-void sbk_crypto_auth_update(void *state, void *data, size_t len)
+void sbk_crypto_auth_update(void *state, const void *data, size_t len)
 {
         crypto_hmac_sha256_update(state, data, len);
 }

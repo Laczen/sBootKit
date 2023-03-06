@@ -33,9 +33,15 @@ from Crypto.Cipher import ChaCha20
 
 SBK_IMAGE_META_TAG = 0x8000
 SBK_IMAGE_AUTH_TAG = 0x7FFF
+SBK_IMAGE_FLAG_CONFIRMED = 0x0001
+SBK_IMAGE_FLAG_ENCRYPTED = 0x0010
+SBK_IMAGE_FLAG_ZLIB = 0x0020
+SBK_IMAGE_FLAG_VCDIFF = 0x0040
+
 SBK_SALT_SIZE = 16
 SBK_HMAC_SIZE = 32
-ldr_context = b"sbk1.0 LOAD"
+SBK_IMAGE_AUTH_CTX = b"SBK AUTHENTICATE"
+SBK_IMAGE_ENCR_CTX = b"SBK ENCRYPT"
 
 INTEL_HEX_EXT = "hex"
 STRUCT_ENDIAN_DICT = {
@@ -58,6 +64,7 @@ class Image():
         self.fsl_fhmac = bytearray([0] * SBK_HMAC_SIZE)
         self.ldr_shmac = bytearray([0] * SBK_HMAC_SIZE)
         self.ldr_fhmac = bytearray([0] * SBK_HMAC_SIZE)
+        self.flags = 0
 
     def __repr__(self):
         return "<align={}, hdrsize={}, Image version={}, endian={}, type={}, \
@@ -169,7 +176,7 @@ class Image():
             SBK_IMAGE_META_TAG, struct.calcsize(meta_fmt),
             self.version.major or 0, self.version.minor or 0, self.version.revision or 0,
             self.offset + self.hdrsize,
-            0,
+            self.flags,
             len(self.payload) - self.hdrsize,
             self.hdrsize,
             image_dep_tag[0],
@@ -234,25 +241,33 @@ class Image():
     def show(self, data):
         print('\\x' + '\\x'.join(format(x, '02x') for x in data))
 
-    def create(self, bootkey, loadkey, encrypt):
+    def create(self, bootkey, loadkey, confirm, encrypt):
+
+        if encrypt:
+            self.flags |= SBK_IMAGE_FLAG_ENCRYPTED
+        
+        if confirm:
+            self.flags |= SBK_IMAGE_FLAG_CONFIRMED
 
         meta_offset = self.add_auth()
         self.add_meta(meta_offset)
 
-        h = HMAC.new(bootkey.get_private_key_bytearray(), digestmod=SHA256)
+        km = HKDF(bootkey.get_private_key_bytearray(), 44, self.salt, SHA256, 1, SBK_IMAGE_AUTH_CTX)
+        h = HMAC.new(km, digestmod=SHA256)
         h.update(self.payload[meta_offset:])
         self.fsl_fhmac = h.digest()
 
-        h = HMAC.new(loadkey.get_private_key_bytearray(), digestmod=SHA256)
+        km = HKDF(loadkey.get_private_key_bytearray(), 44, self.salt, SHA256, 1, SBK_IMAGE_AUTH_CTX)
+        h = HMAC.new(km, digestmod=SHA256)
         h.update(self.payload[meta_offset:self.hdrsize])
         self.ldr_shmac = h.digest()
 
         if encrypt:
-            km = HKDF(loadkey.get_private_key_bytearray(), 44, self.salt, SHA256, 1, ldr_context)
-            cipher = ChaCha20.new(key=km[0:32], nonce=km[32:44])
+            ekm = HKDF(loadkey.get_private_key_bytearray(), 44, self.salt, SHA256, 1, SBK_IMAGE_ENCR_CTX)
+            cipher = ChaCha20.new(key=ekm[0:32], nonce=ekm[32:44])
             self.payload[self.hdrsize:]=cipher.encrypt(self.payload[self.hdrsize:])
 
-        h = HMAC.new(loadkey.get_private_key_bytearray(), digestmod=SHA256)
+        h = HMAC.new(km, digestmod=SHA256)
         h.update(self.payload[meta_offset:])
         self.ldr_fhmac = h.digest()
 

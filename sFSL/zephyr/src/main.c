@@ -173,7 +173,8 @@ void main(void)
                         continue;
                 }
 
-                rc = sbk_image_bootable(&slot, &address);
+                shared_data.bcnt++;
+                rc = sbk_image_bootable(&slot, &address, &shared_data.bcnt);
                 (void)sbk_os_slot_close(&slot);
 
                 if (rc != 0) {
@@ -185,7 +186,6 @@ void main(void)
                         continue;
                 }
 
-                shared_data.bcnt++;
                 jump_image(address);
         }
 

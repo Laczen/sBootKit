@@ -14,13 +14,12 @@ extern "C" {
 
 #define SBK_IMAGE_AUTH_TAG              0x7FFF
 #define SBK_IMAGE_META_TAG              0x8000
-#define SBK_IMAGE_FLAG_ZLIB             0x0001
-#define SBK_IMAGE_FLAG_VCDIFF           0x0002
-#define SBK_IMAGE_FLAG_CONFIRMED        0x0010
-
-#define BOOT_CTX        "sbk1.0 BOOT"
-#define LOAD_CTX        "sbk1.0 LOAD"
-#define AAD_CTX         "sbk1.0 AAD"
+#define SBK_IMAGE_FLAG_CONFIRMED        0x0001
+#define SBK_IMAGE_FLAG_ENCRYPTED        0x0010
+#define SBK_IMAGE_FLAG_ZLIB             0x0020
+#define SBK_IMAGE_FLAG_VCDIFF           0x0040
+#define SBK_IMAGE_AUTH_CONTEXT  "SBK AUTHENTICATE"
+#define SBK_IMAGE_ENCR_CONTEXT  "SBK ENCRYPT"
 
 struct sbk_version;
 struct sbk_version_range;
@@ -69,26 +68,16 @@ struct __attribute__((packed)) sbk_product_dep_info {
 struct sbk_os_slot;
 
 /**
- * @brief sbk_product_dependency_verify
+ * @brief sbk_dependency_verify
  *
- * Verifies that a image in a slot can run on the present product
- *
- * @param slot: slot that contains the image
- * @retval -ERRNO errno code if error
- * @retval 0 if succesfull
- */
-int sbk_product_dependency_verify(const struct sbk_os_slot *slot);
-
-/**
- * @brief sbk_image_dependency_verify
- *
- * Verifies that all image dependencies are satisfied for a image in a slot
+ * Verifies that a image in a slot can run on the present product and that all
+ * image dependencies are satisfied.
  *
  * @param slot: slot that contains the image
  * @retval -ERRNO errno code if error
  * @retval 0 if succesfull
  */
-int sbk_image_dependency_verify(const struct sbk_os_slot *slot);
+int sbk_dependency_verify(const struct sbk_os_slot *slot);
 
 /**
  * @brief sbk_image_bootable
@@ -97,8 +86,10 @@ int sbk_image_dependency_verify(const struct sbk_os_slot *slot);
  *
  * @param slot: slot that contains the image
  * @param address: is updated with the jump address if the image is bootable
+ * @param bcnt: bootcount is reset to zero when image is confirmed
  */
-int sbk_image_bootable(const struct sbk_os_slot *slot, unsigned long *address);
+int sbk_image_bootable(const struct sbk_os_slot *slot, unsigned long *address,
+                       uint8_t *bcnt);
 
 /**
  * @brief sbk_image_get_version

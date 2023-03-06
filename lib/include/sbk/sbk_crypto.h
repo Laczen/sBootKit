@@ -12,9 +12,8 @@
 extern "C" {
 #endif
 
-#define SBK_CRYPTO_KXCH_BUF_SIZE 64
-#define SBK_CRYPTO_AUTH_BUF_SIZE 16 + 15 * 4
-#define SBK_CRYPTO_KM_BUF_SIZE 44
+#define SBK_CRYPTO_KXCH_PRK_SIZE 32
+#define SBK_CRYPTO_KXCH_KM_SIZE 44
 
 
 /** @brief crypto API
@@ -31,32 +30,48 @@ extern "C" {
 void sbk_crypto_cwipe(void *secret, size_t size);
 
 /**
+ * @brief sbk_crypto_kxch_prk_size
+ * 
+ * @return size_t pseudo random key size 
+ */
+inline size_t sbk_crypto_kxch_prk_size(void)
+{
+        return SBK_CRYPTO_KXCH_PRK_SIZE;
+}
+
+/**
  * @brief sbk_crypto_kxch_init
  *
- * Key exchange init phase - generate prk
+ * Key exchange initialize
  *
  * @param prk: returned pseudo random key,
- * @param ktag: key tag used to identify private key,
  * @param salt: salt used in the prk generation,
  * @param salt_size:
- * @retval 1 if key_idx to large,
- * @retval 0 if succesfull
  */
-int sbk_crypto_kxch_init(void *prk, unsigned int key_idx, const uint8_t *salt,
-                          size_t salt_size);
+void sbk_crypto_kxch_init(void *prk, const void *salt, size_t salt_size);
+
+/**
+ * @brief sbk_crypto_kxch_km_size
+ * 
+ * @return size_t key material size 
+ */
+inline size_t sbk_crypto_kxch_km_size(void)
+{
+        return SBK_CRYPTO_KXCH_KM_SIZE;
+}
 
 /**
  * @brief sbk_crypto_kxch_final
  *
- * Key exchange final phase - generate keymaterial and clear prk
+ * Key exchange finalize
  *
- * @param keymaterial: generated key material
- * @param prk: input pseudo random key,
- * @param context: key material context (what will it be used for),
+ * @param keymaterial: returned keymaterial (of size SBK_CRYPTO_KM_SIZE)
+ * @param prk: returned pseudo random key,
+ * @param context: context used in the keymaterial generation,
  * @param context_size:
  */
-void sbk_crypto_kxch_final(void *keymaterial, void *prk, const uint8_t *context,
-                           size_t context_size);
+void sbk_crypto_kxch_final(void *keymaterial, const void *prk,
+                           const void *context, size_t context_size);
 
 /**
  * @brief sbk_crypto_auth_state_size
@@ -73,8 +88,10 @@ size_t sbk_crypto_auth_state_size(void);
  * Initialize an authentication request.
  *
  * @param state: authentication state
+ * @param key: key used for authentication,
+ * @param key_size:
  */
-void sbk_crypto_auth_init(void *state);
+void sbk_crypto_auth_init(void *state, const void *key, size_t key_size);
 
 /**
  * @brief sbk_crypto_auth_update
@@ -85,7 +102,7 @@ void sbk_crypto_auth_init(void *state);
  * @param data: data
  * @param len: data size
  */
-void sbk_crypto_auth_update(void *state, void *data, size_t len);
+void sbk_crypto_auth_update(void *state, const void *data, size_t len);
 
 /**
  * @brief sbk_crypto_auth_final

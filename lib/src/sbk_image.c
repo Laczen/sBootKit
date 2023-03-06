@@ -68,13 +68,25 @@ end:
         return rc;
 }
 
+static void sbk_image_authentic_key(void *km, const uint8_t *salt, 
+                                   size_t salt_len)
+{
+        uint8_t prk[sbk_crypto_kxch_prk_size()];
+
+        sbk_crypto_kxch_init(prk, salt, salt_len);
+        sbk_crypto_kxch_final(km, prk, SBK_IMAGE_AUTH_CONTEXT, 
+                              sizeof(SBK_IMAGE_AUTH_CONTEXT) - 1);
+
+}
+
 static int sbk_image_authentic(const struct sbk_os_slot *slot,
                                const uint8_t *tag, size_t tlen, bool full)
 {
         int rc;
         struct sbk_image_meta meta;
         uint32_t pos, len;
-        uint8_t sbuf[sbk_crypto_auth_state_size()];
+        uint8_t otk[sbk_crypto_kxch_km_size()];
+        uint8_t sbuf[sbk_crypto_auth_state_size()]; 
         uint8_t buf[64];
 
         rc = sbk_image_get_tagdata(slot, SBK_IMAGE_META_TAG, (void *)&meta, sizeof(meta));
@@ -89,7 +101,9 @@ static int sbk_image_authentic(const struct sbk_os_slot *slot,
                 len += meta.image_size;
         }
 
-        sbk_crypto_auth_init(sbuf);
+        sbk_image_authentic_key(otk, meta.salt, sizeof(meta.salt));
+        sbk_crypto_auth_init(sbuf, otk, sizeof(otk));
+        sbk_crypto_cwipe(otk, sizeof(otk));
 
         while (len != 0) {
                 uint32_t rdlen = MIN(len, sizeof(buf));
@@ -113,7 +127,7 @@ end:
         return rc;
 }
 
-int sbk_product_dependency_verify(const struct sbk_os_slot *slot)
+static int sbk_product_dependency_verify(const struct sbk_os_slot *slot)
 {
         int rc;
         struct sbk_image_meta meta;
@@ -167,7 +181,7 @@ end:
         return rc;
 }
 
-int sbk_image_dependency_verify(const struct sbk_os_slot *slot)
+static int sbk_image_dependency_verify(const struct sbk_os_slot *slot)
 {
         int rc;
         struct sbk_image_meta meta;
@@ -241,7 +255,22 @@ end:
         return rc;
 }
 
-int sbk_image_bootable(const struct sbk_os_slot *slot, unsigned long *address)
+int sbk_dependency_verify(const struct sbk_os_slot *slot)
+{
+        int rc;
+
+        rc = sbk_product_dependency_verify(slot);
+        if (rc) {
+                goto end;
+        }
+
+        rc = sbk_image_dependency_verify(slot);
+end:
+        return rc;
+}
+
+int sbk_image_bootable(const struct sbk_os_slot *slot, unsigned long *address,
+                       uint8_t *bcnt)
 {
         int rc;
         struct sbk_image_meta meta;
@@ -261,12 +290,7 @@ int sbk_image_bootable(const struct sbk_os_slot *slot, unsigned long *address)
                 goto end;
         }
 
-        rc = sbk_product_dependency_verify(slot);
-        if (rc != 0) {
-                goto end;
-        }
-
-        rc = sbk_image_dependency_verify(slot);
+        rc = sbk_dependency_verify(slot);
         if (rc != 0) {
                 goto end;
         }
@@ -282,6 +306,12 @@ int sbk_image_bootable(const struct sbk_os_slot *slot, unsigned long *address)
         rc = sbk_image_authentic(slot, &auth.fsl_fhmac[0], 32, true);
         if (rc != 0) {
                 goto end;
+        }
+
+        if ((meta.image_flags & SBK_IMAGE_FLAG_CONFIRMED) == 
+            SBK_IMAGE_FLAG_CONFIRMED) {
+                SBK_LOG_DBG("Confirmed image: reset bcnt");
+                *bcnt = 0U;
         }
 
         *address = meta.image_start_address;

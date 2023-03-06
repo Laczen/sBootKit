@@ -167,13 +167,14 @@ class BasedIntParamType(click.ParamType):
               help = 'Authenticate image utilizing the provided boot key')
 @click.option('-lk','--loadkey', metavar = 'filename', required = True,
               help = 'Authenticate image utilizing the provided loader key')
+@click.option('-c','--confirm', is_flag = True, help = 'create confirmed image')
 @click.option('-e','--encrypt', is_flag = True, help = 'create encrypted image')
 @click.option('-tst', '--test-image', is_flag = True,
               help = 'generate test image as c file')
 @click.command(help='''Create a image for use with sBootKit\n
                INFILE and OUTFILE are of type hex''')
 def create(align, hdrsize, version, product, dependency, bootkey, loadkey,
-           encrypt, test_image, infile, outfile, endian):
+           confirm, encrypt, test_image, infile, outfile, endian):
     bootkey = load_key(bootkey)
     loadkey = load_key(loadkey)
     if (bootkey is not None) and (loadkey is not None):
@@ -181,7 +182,7 @@ def create(align, hdrsize, version, product, dependency, bootkey, loadkey,
                           product_dep = product, image_dep = dependency,
                           endian = endian, align = align, type = type)
         img.load(infile)
-        img.create(bootkey, loadkey, encrypt)
+        img.create(bootkey, loadkey, confirm, encrypt)
         if outfile is not None:
             img.save(outfile)
 

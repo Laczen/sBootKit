@@ -200,6 +200,10 @@ def create(align, hdrsize, version, product, dependency, bootkey, loadkey,
 
 class AliasesGroup(click.Group):
 
+    _aliases = {
+        "sign": "create",
+    }
+
     def list_commands(self, ctx):
         cmds = [k for k in self.commands]
         aliases = [k for k in self._aliases]

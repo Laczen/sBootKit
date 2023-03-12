@@ -102,18 +102,18 @@ static void sha256_transform(crypto_sha256_ctx *ctx)
         ctx->state[7] += H;
 }
 
-size_t crypto_sha256_state_size(void)
-{
-        return sizeof(crypto_sha256_ctx);
-}
-
 size_t crypto_sha256_block_size(void)
 {
         return CRYPTO_SHA256_BLOCKSIZE;
 }
 
-void crypto_sha256_init(void *state)
+size_t crypto_sha256_state_size(void)
 {
+        return sizeof(crypto_sha256_ctx);
+}
+
+void crypto_sha256_init(void *state)
+{  
         if (state == NULL) {
                 return;
         }
@@ -195,14 +195,14 @@ typedef struct {
 	uint8_t key[64];
 } crypto_hmac_sha256_ctx;
 
-size_t crypto_hmac_sha256_state_size(void)
-{
-        return sizeof(crypto_hmac_sha256_ctx);
-}
-
 size_t crypto_hmac_sha256_block_size(void)
 {
         return CRYPTO_HMAC_SHA256_BLOCKSIZE;
+}
+
+size_t crypto_hmac_sha256_state_size(void)
+{
+        return sizeof(crypto_hmac_sha256_ctx);
 }
 
 void crypto_hmac_sha256_init(void *state, const void *key, size_t keylen)
@@ -279,7 +279,7 @@ void crypto_hmac_sha256(void *out, const void *key, size_t keylen,
 // HKDF-SHA256 //
 /////////////////
 size_t crypto_hkdf_sha256_prk_size(void) {
-        return CRYPTO_HMAC_SHA256_BLOCKSIZE;
+        return CRYPTO_HKDF_SHA256_PRKSIZE;
 }
 
 void crypto_hkdf_sha256_extract(void *prk, const void *salt, size_t saltlen,
@@ -326,7 +326,7 @@ void crypto_hkdf_sha256(void *out, const void *salt, size_t saltlen,
                         const void *key, size_t keylen, const void *lbl,
                         size_t lbllen, size_t len)
 {
-        uint8_t prk[32];
+        uint8_t prk[CRYPTO_HKDF_SHA256_PRKSIZE];
 
         crypto_hkdf_sha256_extract(prk, salt, saltlen, key, keylen);
         crypto_hkdf_sha256_expand(out, prk, lbl, lbllen, len);

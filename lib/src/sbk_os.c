@@ -49,6 +49,13 @@ int sbk_os_slot_close(const struct sbk_os_slot *slot)
         return slot->sync(slot->ctx);
 }
 
+size_t sbk_os_slot_get_sz(const struct sbk_os_slot *slot)
+{
+        SBK_ASSERT(slot);
+        SBK_ASSERT(slot->get_size);
+        return slot->get_size(slot->ctx);
+}
+
 unsigned long sbk_os_slot_get_sa(const struct sbk_os_slot *slot)
 {
         SBK_ASSERT(slot);
@@ -56,9 +63,13 @@ unsigned long sbk_os_slot_get_sa(const struct sbk_os_slot *slot)
         return slot->get_start_address(slot->ctx);
 }
 
-size_t sbk_os_slot_get_sz(const struct sbk_os_slot *slot)
+
+bool sbk_os_slot_inrange(const struct sbk_os_slot *slot, unsigned long addr)
 {
         SBK_ASSERT(slot);
+        SBK_ASSERT(slot->get_start_address);
         SBK_ASSERT(slot->get_size);
-        return slot->get_size(slot->ctx);
+        void *ctx = slot->ctx;
+
+        return (addr - slot->get_start_address(ctx)) < slot->get_size(ctx);
 }

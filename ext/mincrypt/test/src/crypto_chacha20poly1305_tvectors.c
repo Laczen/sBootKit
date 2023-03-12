@@ -310,5 +310,5 @@ int crypto_poly1305_test(int index)
 	size_t msglen = poly1305_tvectors[index].msg_length;
 
 	crypto_poly1305(mac, key, msg, msglen);
-	return compare(mac, msgmac, crypto_poly1305_block_size());
+	return compare(mac, msgmac, sizeof(mac));
 }

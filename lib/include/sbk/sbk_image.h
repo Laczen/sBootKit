@@ -11,6 +11,7 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #define SBK_IMAGE_AUTH_TAG              0x7FFF
 #define SBK_IMAGE_META_TAG              0x8000
@@ -67,55 +68,59 @@ struct __attribute__((packed)) sbk_product_dep_info {
 
 struct sbk_os_slot;
 
+struct sbk_image_buffer {
+        uint8_t *buf;           /* pointer to buffer */
+        size_t blen;            /* buffer size */
+        uint32_t bpos;          /* buffer position */
+};
+
+struct sbk_image {
+        struct sbk_os_slot *slot;      /* image slot pointer */
+        struct sbk_image_buffer *ib;   /* pointer to image buffer */
+};
+
+int sbk_image_read(const struct sbk_image *image, unsigned long offset,
+                   void *data, size_t len);
+
+int sbk_image_write(const struct sbk_image *image, unsigned long offset,
+                    const void *data, size_t len);
+
+int sbk_image_flush(const struct sbk_image *image);
+
 /**
  * @brief sbk_dependency_verify
  *
- * Verifies that a image in a slot can run on the present product and that all
+ * Verifies that a image can run on the present product and that all
  * image dependencies are satisfied.
  *
- * @param slot: slot that contains the image
+ * @param image: pointer to image struct
  * @retval -ERRNO errno code if error
  * @retval 0 if succesfull
  */
-int sbk_dependency_verify(const struct sbk_os_slot *slot);
+int sbk_image_dependency_verify(const struct sbk_image *image);
 
 /**
  * @brief sbk_image_bootable
  *
- * Check if image in slot is bootable
+ * Check if image is bootable
  *
- * @param slot: slot that contains the image
+ * @param image: pointer to image struct
  * @param address: is updated with the jump address if the image is bootable
  * @param bcnt: bootcount is reset to zero when image is confirmed
  */
-int sbk_image_bootable(const struct sbk_os_slot *slot, unsigned long *address,
+int sbk_image_bootable(const struct sbk_image *image, unsigned long *address,
                        uint8_t *bcnt);
 
 /**
  * @brief sbk_image_get_version
  *
- * Get the version of a image in a slot
+ * Get the version of an image
  *
- * @param slot: slot that contains the image
+ * @param image: pointer to image struct
  * @param version: returns the version as sbk_version
  */
-int sbk_image_get_version(const struct sbk_os_slot *slot,
+int sbk_image_get_version(const struct sbk_image *image,
                           struct sbk_version *version);
-
-/**
- * @brief sbk_image_swap
- *
- * swap the image from slot in to slot out using an optional intermediate slot
- *
- * @param in: slot containing the update image
- * @param out: slot containing the old image
- * @param im: intermediate slot to store the old image while doing the swap
- *            (when set to NULL the swap will perform an overwrite and the
- *             old image is lost).
- * @param version: returns the version as sbk_version
- */
-int sbk_image_swap(const struct sbk_os_slot *in, const struct sbk_os_slot *out,
-                   const struct sbk_os_slot *im);
 
 #ifdef __cplusplus
 }

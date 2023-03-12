@@ -10,6 +10,7 @@
 #define SBK_OS_H_
 
 #include <stddef.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -87,6 +88,13 @@ int sbk_os_slot_prog(const struct sbk_os_slot *slot, unsigned long off,
 int sbk_os_slot_close(const struct sbk_os_slot *slot);
 
 /**
+ * @brief sbk_os_slot_get_sz
+ *
+ * get a slot size
+ */
+size_t sbk_os_slot_get_sz(const struct sbk_os_slot *slot);
+
+/**
  * @brief sbk_os_slot_get_sa
  *
  * get a slot start address
@@ -94,11 +102,11 @@ int sbk_os_slot_close(const struct sbk_os_slot *slot);
 unsigned long sbk_os_slot_get_sa(const struct sbk_os_slot *slot);
 
 /**
- * @brief sbk_os_slot_get_sz
+ * @brief sbk_os_slot_inrange
  *
- * get a slot size
+ * check if an address belongs to a slot
  */
-size_t sbk_os_slot_get_sz(const struct sbk_os_slot *slot);
+bool sbk_os_slot_inrange(const struct sbk_os_slot *slot, unsigned long addr);
 
 #ifdef __cplusplus
 } /* extern "C" */

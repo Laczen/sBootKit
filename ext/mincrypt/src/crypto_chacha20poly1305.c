@@ -167,20 +167,24 @@ static void chacha20_ietf_nonce_setup(crypto_chacha20_ctx *ctx,
     ctx->input[15] = U8TO32(nonce + 8);
 }
 
-typedef struct {
-	uint8_t key[32];
-	uint8_t nonce[8];
-	uint64_t ic;
-} crypto_chacha20_ref_in;
-
 size_t crypto_chacha20_ref_block_size(void)
 {
-	return CRYPTO_CHACHA20_BLOCKSIZE;
+	return CRYPTO_CHACHA20_REF_BLOCKSIZE;
+}
+
+size_t crypto_chacha20_ref_key_size(void)
+{
+	return CRYPTO_CHACHA20_REF_KEYSIZE;
+}
+
+size_t crypto_chacha20_ref_nonce_size(void)
+{
+	return CRYPTO_CHACHA20_REF_NONCESIZE;
 }
 
 size_t crypto_chacha20_ref_state_size(void)
 {
-	return sizeof(crypto_chacha20_ref_in);
+	return sizeof(crypto_chacha20_ctx);
 }
 
 void crypto_chacha20_ref_init(void *state, const uint8_t *key,
@@ -190,11 +194,18 @@ void crypto_chacha20_ref_init(void *state, const uint8_t *key,
 		return;
 	}
 
-	crypto_chacha20_ref_in *in = (crypto_chacha20_ref_in *)state;
+	crypto_chacha20_ctx *ctx = (crypto_chacha20_ctx *)state;
+	uint8_t ic_bytes[8];
+        uint32_t ic_high;
+        uint32_t ic_low;
 
-	memcpy(in->key, key, sizeof(((crypto_chacha20_ref_in *)0)->key));
-	memcpy(in->nonce, nonce, sizeof(((crypto_chacha20_ref_in *)0)->nonce));
-	in->ic = ic;
+	ic_high = U32V(ic >> 32);
+        ic_low  = U32V(ic);
+        U32TO8(&ic_bytes[0], ic_low);
+        U32TO8(&ic_bytes[4], ic_high);
+
+	chacha20_key_setup(ctx, key);
+        chacha20_ref_nonce_setup(ctx, nonce, ic_bytes);
 }
 
 void crypto_chacha20_ref_xor(uint8_t *c, const uint8_t *m, uint64_t clen,
@@ -204,46 +215,40 @@ void crypto_chacha20_ref_xor(uint8_t *c, const uint8_t *m, uint64_t clen,
 		return;
 	}
 
-	crypto_chacha20_ref_in *in = (crypto_chacha20_ref_in *)state;
-        crypto_chacha20_ctx ctx;
-	uint8_t ic_bytes[8];
-        uint32_t ic_high;
-        uint32_t ic_low;
-
         if (!clen) {
                 return;
         }
-	ic_high = U32V(in->ic >> 32);
-        ic_low  = U32V(in->ic);
-        U32TO8(&ic_bytes[0], ic_low);
-        U32TO8(&ic_bytes[4], ic_high);
 
-        chacha20_key_setup(&ctx, in->key);
-        chacha20_ref_nonce_setup(&ctx, in->nonce, ic_bytes);
+	crypto_chacha20_ctx *ctx = (crypto_chacha20_ctx *)state;
+
 	if (m == NULL) {
 		memset(c, 0, clen);
-        	chacha20_encrypt_bytes(&ctx, c, c, clen);
+        	chacha20_encrypt_bytes(ctx, c, c, clen);
 	} else {
-		chacha20_encrypt_bytes(&ctx, c, m, clen);
+		chacha20_encrypt_bytes(ctx, c, m, clen);
 	}
 
-        cwipe(&ctx, sizeof(ctx));
+        cwipe(ctx, sizeof(crypto_chacha20_ctx));
 }
-
-typedef struct {
-	uint8_t key[32];
-	uint8_t nonce[12];
-	uint32_t ic;
-} crypto_chacha20_ietf_in;
 
 size_t crypto_chacha20_ietf_block_size(void)
 {
-	return CRYPTO_CHACHA20_BLOCKSIZE;
+	return CRYPTO_CHACHA20_IETF_BLOCKSIZE;
+}
+
+size_t crypto_chacha20_ietf_key_size(void)
+{
+	return CRYPTO_CHACHA20_IETF_KEYSIZE;
+}
+
+size_t crypto_chacha20_ietf_nonce_size(void)
+{
+	return CRYPTO_CHACHA20_IETF_NONCESIZE;
 }
 
 size_t crypto_chacha20_ietf_state_size(void)
 {
-	return sizeof(crypto_chacha20_ietf_in);
+	return sizeof(crypto_chacha20_ctx);
 }
 
 void crypto_chacha20_ietf_init(void *state, const uint8_t *key,
@@ -253,11 +258,13 @@ void crypto_chacha20_ietf_init(void *state, const uint8_t *key,
 		return;
 	}
 
-	crypto_chacha20_ietf_in *in = (crypto_chacha20_ietf_in *)state;
+	crypto_chacha20_ctx *ctx = (crypto_chacha20_ctx *)state;
+	uint8_t ic_bytes[4];
 
-	memcpy(in->key, key, sizeof(((crypto_chacha20_ietf_in *)0)->key));
-	memcpy(in->nonce, nonce, sizeof(((crypto_chacha20_ietf_in *)0)->nonce));
-	in->ic = ic;
+	U32TO8(ic_bytes, ic);
+
+        chacha20_key_setup(ctx, key);
+        chacha20_ietf_nonce_setup(ctx, nonce, ic_bytes);
 }
 
 void crypto_chacha20_ietf_xor(uint8_t *c, const uint8_t *m, uint32_t clen,
@@ -267,31 +274,23 @@ void crypto_chacha20_ietf_xor(uint8_t *c, const uint8_t *m, uint32_t clen,
 		return;
 	}
 
-	crypto_chacha20_ietf_in *in = (crypto_chacha20_ietf_in *)state;
-
-        crypto_chacha20_ctx ctx;
-	uint8_t ic_bytes[4];
-
         if (!clen) {
                 return;
         }
 
-	U32TO8(ic_bytes, in->ic);
+	crypto_chacha20_ctx *ctx = (crypto_chacha20_ctx *)state;
 
-        chacha20_key_setup(&ctx, in->key);
-        chacha20_ietf_nonce_setup(&ctx, in->nonce, ic_bytes);
 	if (m == NULL) {
 		memset(c, 0, clen);
-        	chacha20_encrypt_bytes(&ctx, c, c, (uint64_t)clen);
+        	chacha20_encrypt_bytes(ctx, c, c, (uint64_t)clen);
 	} else {
-		chacha20_encrypt_bytes(&ctx, c, m, (uint64_t)clen);
+		chacha20_encrypt_bytes(ctx, c, m, (uint64_t)clen);
 	}
 
-        cwipe(&ctx, sizeof(ctx));
+        cwipe(ctx, sizeof(ctx));
 }
 
 /* poly1305 */
-
 typedef struct {
 	uint32_t r[5];
 	uint32_t h[5];
@@ -305,12 +304,17 @@ size_t crypto_poly1305_block_size(void)
 	return CRYPTO_POLY1305_BLOCKSIZE;
 }
 
+size_t crypto_poly1305_key_size(void)
+{
+	return CRYPTO_POLY1305_KEYSIZE;
+}
+
 size_t crypto_poly1305_state_size(void)
 {
 	return sizeof(crypto_poly1305_ctx);
 }
 
-void crypto_poly1305_init(void *state, const uint8_t key[32])
+void crypto_poly1305_init(void *state, const uint8_t *key)
 {
 	if (state == NULL) {
 		return;
@@ -374,7 +378,7 @@ static void poly1305_block(crypto_poly1305_ctx *ctx, uint32_t hibit)
 	ctx->h[4] = h[4];
 }
 
-void crypto_poly1305_final(uint8_t mac[16], void *state)
+void crypto_poly1305_final(uint8_t *mac, void *state)
 {
 	if (state == NULL) {
 		return;
@@ -438,7 +442,7 @@ void crypto_poly1305_final(uint8_t mac[16], void *state)
 	}
 
 	cwipe((void *)g, sizeof(g));
-	cwipe((void *)ctx, sizeof(crypto_poly1305_ctx)); /* zero out the ctx */
+	cwipe((void *)ctx, sizeof(crypto_poly1305_ctx));
 }
 
 void crypto_poly1305_update(void *state, const uint8_t *msg, size_t msglen)
@@ -473,7 +477,7 @@ void crypto_poly1305_flush(void *state)
 	}
 }
 
-void crypto_poly1305(uint8_t mac[16], const uint8_t key[32], const uint8_t *msg,
+void crypto_poly1305(uint8_t *mac, const uint8_t *key, const uint8_t *msg,
 		     size_t msglen)
 {
 	uint8_t state[sizeof(crypto_poly1305_ctx)];

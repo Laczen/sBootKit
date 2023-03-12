@@ -76,13 +76,13 @@ int crypto_sha256_testcnt(void)
 
 int crypto_sha256_test(int index)
 {
-	uint8_t res[32];
+	uint8_t res[crypto_sha256_block_size()];
 	uint8_t *msg = (uint8_t *)&sha256_tvectors[index].msg[0];
 	uint8_t *msgres = (uint8_t *)&sha256_tvectors[index].res[0];
 	size_t msglen = sha256_tvectors[index].msg_length;
 
 	crypto_sha256(res, msg, msglen);
-	return compare(res, msgres, CRYPTO_SHA256_BLOCKSIZE);
+	return compare(res, msgres, sizeof(res));
 }
 
 /* Test Vector #1 */
@@ -162,7 +162,7 @@ int crypto_hmac_sha256_testcnt(void)
 
 int crypto_hmac_sha256_test(int index)
 {
-	uint8_t mac[32];
+	uint8_t mac[crypto_hmac_sha256_block_size()];
 	uint8_t *key = (uint8_t *)&hmac_sha256_tvectors[index].key[0];
 	uint8_t *msg = (uint8_t *)&hmac_sha256_tvectors[index].msg[0];
 	uint8_t *msgmac = (uint8_t *)&hmac_sha256_tvectors[index].mac[0];
@@ -170,7 +170,7 @@ int crypto_hmac_sha256_test(int index)
 	size_t msglen = hmac_sha256_tvectors[index].msg_length;
 
 	crypto_hmac_sha256(mac, key, keylen, msg, msglen);
-	return compare(mac, msgmac, CRYPTO_SHA256_BLOCKSIZE);
+	return compare(mac, msgmac, sizeof(mac));
 }
 
 #define TEST_VECTOR_HKDF_SHA256_01_MASTER \

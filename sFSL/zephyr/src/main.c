@@ -115,6 +115,10 @@ static size_t get_size(const void *ctx)
 
 static int slot_init(struct sbk_os_slot *slot, unsigned int slot_no)
 {
+        if (slot_no >= ARRAY_SIZE(slots)) {
+                return -SBK_EC_ENOENT;
+        }
+
         slot->ctx = (void *)&slots[slot_no];
         slot->read = read;
         slot->prog = prog;
@@ -160,6 +164,9 @@ void main(void)
 
         for (uint32_t i = 0; i < ARRAY_SIZE(slots); i++) {
                 struct sbk_os_slot slot;
+                struct sbk_image image = {
+                        .slot = &slot,
+                };
 
                 if (shared_data.bslot >= ARRAY_SIZE(slots)) {
                         shared_data.bslot = 0U;
@@ -167,16 +174,15 @@ void main(void)
 
                 SBK_LOG_DBG("Testing slot %d", shared_data.bslot);
 
-                rc = sbk_os_slot_open(&slot, shared_data.bslot);
+                rc = sbk_os_slot_open(image.slot, shared_data.bslot);
                 if (rc != 0) {
                         shared_data.bslot = 0U;
                         continue;
                 }
 
                 shared_data.bcnt++;
-                rc = sbk_image_bootable(&slot, &address, &shared_data.bcnt);
-                (void)sbk_os_slot_close(&slot);
-
+                rc = sbk_image_bootable(&image, &address, &shared_data.bcnt);
+                (void)sbk_os_slot_close(image.slot);
                 if (rc != 0) {
                         SBK_LOG_DBG("Failed booting image in slot %d",
                                     shared_data.bslot);

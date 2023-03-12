@@ -18,10 +18,6 @@ extern "C" {
  * @{
  */
 
-int sbk_move(void);
-
-int sbk_move_manifest(void);
-
 /**
  * @}
  */

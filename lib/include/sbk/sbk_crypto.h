@@ -12,10 +12,6 @@
 extern "C" {
 #endif
 
-#define SBK_CRYPTO_KXCH_PRK_SIZE 32
-#define SBK_CRYPTO_KXCH_KM_SIZE 44
-
-
 /** @brief crypto API
  * @{
  */
@@ -29,15 +25,8 @@ extern "C" {
  */
 void sbk_crypto_cwipe(void *secret, size_t size);
 
-/**
- * @brief sbk_crypto_kxch_prk_size
- * 
- * @return size_t pseudo random key size 
- */
-inline size_t sbk_crypto_kxch_prk_size(void)
-{
-        return SBK_CRYPTO_KXCH_PRK_SIZE;
-}
+size_t sbk_crypto_kxch_prk_size(void);
+size_t sbk_crypto_kxch_km_size(void);
 
 /**
  * @brief sbk_crypto_kxch_init
@@ -49,16 +38,6 @@ inline size_t sbk_crypto_kxch_prk_size(void)
  * @param salt_size:
  */
 void sbk_crypto_kxch_init(void *prk, const void *salt, size_t salt_size);
-
-/**
- * @brief sbk_crypto_kxch_km_size
- * 
- * @return size_t key material size 
- */
-inline size_t sbk_crypto_kxch_km_size(void)
-{
-        return SBK_CRYPTO_KXCH_KM_SIZE;
-}
 
 /**
  * @brief sbk_crypto_kxch_final
@@ -73,13 +52,7 @@ inline size_t sbk_crypto_kxch_km_size(void)
 void sbk_crypto_kxch_final(void *keymaterial, const void *prk,
                            const void *context, size_t context_size);
 
-/**
- * @brief sbk_crypto_auth_state_size
- *
- * Get the authentication state size.
- *
- * @retval state size
- */
+size_t sbk_crypto_auth_block_size(void);
 size_t sbk_crypto_auth_state_size(void);
 
 /**
@@ -117,6 +90,34 @@ void sbk_crypto_auth_update(void *state, const void *data, size_t len);
  */
 int sbk_crypto_auth_final(const void *tag, void *state);
 
+size_t sbk_crypto_cipher_block_size(void);
+size_t sbk_crypto_cipher_key_size(void);
+size_t sbk_crypto_cipher_nonce_size(void);
+size_t sbk_crypto_cipher_state_size(void);
+
+/**
+ * @brief sbk_crypto_cipher_init
+ *
+ * Initialize an cipher request.
+ *
+ * @param state: cipher state
+ * @param km: key material (key-nonce) used for cipher,
+ * @param km_size:
+ * @param cnt: block counter
+ */
+void sbk_crypto_cipher_init(void *state, const void *km, size_t km_size, 
+                            uint32_t cnt);
+
+/**
+ * @brief sbk_crypto_cipher
+ *
+ * cipher the data (this erases the state).
+ *
+ * @param state: cipher state
+ * @param data: data ciphered during operation
+ * @param len: data size
+ */
+void sbk_crypto_cipher(void *state, void *data, size_t len);
 
 /**
  * @}

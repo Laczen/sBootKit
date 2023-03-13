@@ -167,21 +167,6 @@ static void chacha20_ietf_nonce_setup(crypto_chacha20_ctx *ctx,
     ctx->input[15] = U8TO32(nonce + 8);
 }
 
-size_t crypto_chacha20_ref_block_size(void)
-{
-	return CRYPTO_CHACHA20_REF_BLOCKSIZE;
-}
-
-size_t crypto_chacha20_ref_key_size(void)
-{
-	return CRYPTO_CHACHA20_REF_KEYSIZE;
-}
-
-size_t crypto_chacha20_ref_nonce_size(void)
-{
-	return CRYPTO_CHACHA20_REF_NONCESIZE;
-}
-
 size_t crypto_chacha20_ref_state_size(void)
 {
 	return sizeof(crypto_chacha20_ctx);
@@ -229,21 +214,6 @@ void crypto_chacha20_ref_xor(uint8_t *c, const uint8_t *m, uint64_t clen,
 	}
 
         cwipe(ctx, sizeof(crypto_chacha20_ctx));
-}
-
-size_t crypto_chacha20_ietf_block_size(void)
-{
-	return CRYPTO_CHACHA20_IETF_BLOCKSIZE;
-}
-
-size_t crypto_chacha20_ietf_key_size(void)
-{
-	return CRYPTO_CHACHA20_IETF_KEYSIZE;
-}
-
-size_t crypto_chacha20_ietf_nonce_size(void)
-{
-	return CRYPTO_CHACHA20_IETF_NONCESIZE;
 }
 
 size_t crypto_chacha20_ietf_state_size(void)
@@ -298,16 +268,6 @@ typedef struct {
         uint32_t bufpos;
 	uint8_t buf[CRYPTO_POLY1305_BLOCKSIZE];
 } crypto_poly1305_ctx;
-
-size_t crypto_poly1305_block_size(void)
-{
-	return CRYPTO_POLY1305_BLOCKSIZE;
-}
-
-size_t crypto_poly1305_key_size(void)
-{
-	return CRYPTO_POLY1305_KEYSIZE;
-}
 
 size_t crypto_poly1305_state_size(void)
 {

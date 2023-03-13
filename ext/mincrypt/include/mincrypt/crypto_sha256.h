@@ -25,7 +25,11 @@ extern "C" {
 ///////////
 #define CRYPTO_SHA256_BLOCKSIZE 32
 
-size_t crypto_sha256_block_size(void);
+static inline size_t crypto_sha256_block_size(void)
+{
+	return CRYPTO_SHA256_BLOCKSIZE;
+}
+
 size_t crypto_sha256_state_size(void);
 void crypto_sha256_init(void *state);
 void crypto_sha256_update(void *state, const void *in, size_t inlen);
@@ -39,7 +43,11 @@ void crypto_sha256(void *out, const void *in, size_t inlen);
 ////////////////
 #define CRYPTO_HMAC_SHA256_BLOCKSIZE 32
 
-size_t crypto_hmac_sha256_block_size(void);
+static inline size_t crypto_hmac_sha256_block_size(void)
+{
+	return CRYPTO_HMAC_SHA256_BLOCKSIZE;
+}
+
 size_t crypto_hmac_sha256_state_size(void);
 void crypto_hmac_sha256_init(void *state, const void *key, size_t keylen);
 void crypto_hmac_sha256_update(void *state, const void *in, size_t inlen);
@@ -54,7 +62,11 @@ void crypto_hmac_sha256(void *out, const void *key, size_t keylen,
 ////////////////
 #define CRYPTO_HKDF_SHA256_PRKSIZE 32
 
-size_t crypto_hkdf_sha256_prk_size(void);
+static inline size_t crypto_hkdf_sha256_prk_size(void)
+{
+	return CRYPTO_HKDF_SHA256_PRKSIZE;
+}
+
 void crypto_hkdf_sha256_extract(void *prk, const void *salt, size_t saltlen,
 				const void *key, size_t keylen);
 void crypto_hkdf_sha256_expand(void *out, const void *prk, const void *lbl,

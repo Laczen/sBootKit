@@ -81,6 +81,13 @@ int sbk_os_slot_prog(const struct sbk_os_slot *slot, unsigned long off,
                      const void *data, size_t len);
 
 /**
+ * @brief sbk_os_slot_sync
+ *
+ * ensure all data is written to a slot
+ */
+int sbk_os_slot_sync(const struct sbk_os_slot *slot);
+
+/**
  * @brief sbk_os_slot_close
  *
  * closes a slot and ensures all data is written

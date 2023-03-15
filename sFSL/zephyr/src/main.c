@@ -182,7 +182,6 @@ void main(void)
 
                 shared_data.bcnt++;
                 rc = sbk_image_bootable(&image, &address, &shared_data.bcnt);
-                (void)sbk_os_slot_close(image.slot);
                 if (rc != 0) {
                         SBK_LOG_DBG("Failed booting image in slot %d",
                                     shared_data.bslot);

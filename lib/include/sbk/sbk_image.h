@@ -70,8 +70,9 @@ struct sbk_os_slot;
 
 struct sbk_image_buffer {
         uint8_t *buf;           /* pointer to buffer */
+        unsigned long bstart;   /* offset of buffer in image */
+        unsigned long bpos;     /* offset in buffer */
         size_t blen;            /* buffer size */
-        uint32_t bpos;          /* buffer position */
 };
 
 struct sbk_image {

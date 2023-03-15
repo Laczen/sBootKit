@@ -28,6 +28,7 @@ enum sbk_error_codes {
         SBK_EC_ENOENT = 2,
         SBK_EC_EIO = 5,
         SBK_EC_EFAULT = 14,
+        SBK_EC_EINVAL = 22,
 };
 
 #ifdef CONFIG_SBK_UTIL_INCLUDE

@@ -20,7 +20,4 @@ void main(void)
 	printk("Hello World! %s\n", CONFIG_BOARD);
 	rc = flash_read(flash_dev, 0, buf, sizeof(buf));
 	printk("FR %d\n", rc);
-	rc = flash_read(NULL, 0, buf, sizeof(buf));
-	printk("SR %d\n", rc);
-
 }

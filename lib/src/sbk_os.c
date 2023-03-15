@@ -36,17 +36,17 @@ int sbk_os_slot_prog(const struct sbk_os_slot *slot, unsigned long off,
         return slot->prog(slot->ctx, off, data, len);
 }
 
-int sbk_os_slot_open(struct sbk_os_slot *slot, unsigned int slot_no)
-{
-        SBK_ASSERT(slot);
-        return sbk_os_slot_init(slot, slot_no);
-}
-
-int sbk_os_slot_close(const struct sbk_os_slot *slot)
+int sbk_os_slot_sync(const struct sbk_os_slot *slot)
 {
         SBK_ASSERT(slot);
         SBK_ASSERT(slot->sync);
         return slot->sync(slot->ctx);
+}
+
+int sbk_os_slot_open(struct sbk_os_slot *slot, unsigned int slot_no)
+{
+        SBK_ASSERT(slot);
+        return sbk_os_slot_init(slot, slot_no);
 }
 
 size_t sbk_os_slot_get_sz(const struct sbk_os_slot *slot)

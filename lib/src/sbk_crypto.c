@@ -113,10 +113,11 @@ void sbk_crypto_cipher_init(void *state, const void *km, size_t km_size,
         uint8_t *key = (uint8_t *)km;
         uint8_t *nonce = key + sbk_crypto_cipher_key_size();
 
-        return crypto_chacha20_ietf_init(state, key, nonce, cnt + 1);
+        return crypto_chacha20_ietf_init(state, key, nonce, cnt);
 }
 
-void sbk_crypto_cipher(void *state, void *data, size_t len)
+void sbk_crypto_cipher(void *out, const void *in, size_t len, void *state)
 {
-        crypto_chacha20_ietf_xor((uint8_t *)data, NULL, len, state);
+        crypto_chacha20_ietf_xor((uint8_t *)out, (const uint8_t *)in, len, 
+                                 state);
 }

@@ -378,7 +378,9 @@ static int sbk_image_cipher(const struct sbk_image *image, unsigned long offset,
 {
 	int rc;
 	struct sbk_image_meta meta;
-	uint8_t eb[sbk_crypto_cipher_block_size()];
+	size_t bsize = sbk_crypto_cipher_block_size(); 
+	uint8_t dbuf[bsize];
+	uint8_t cbuf[bsize];
 	uint8_t est[sbk_crypto_cipher_state_size()];
 	uint8_t otk[sbk_crypto_kxch_km_size()];
 	uint8_t *data8 = (uint8_t *)data;
@@ -404,18 +406,18 @@ static int sbk_image_cipher(const struct sbk_image *image, unsigned long offset,
         sbk_image_get_ciph_key(&meta, otk);
 
 	while (len != 0U) {
-                uint32_t bcnt = (offset - meta.image_offset) / sizeof(eb);
-		unsigned long boff = bcnt * sizeof(eb) + meta.image_offset;
+                uint32_t bcnt = (offset - meta.image_offset) / bsize;
+		unsigned long boff = bcnt * bsize + meta.image_offset;
 		
-		rc = sbk_os_slot_read(image->slot, boff, eb, sizeof(eb));
+		rc = sbk_os_slot_read(image->slot, boff, dbuf, bsize);
 		if (rc) {
 			goto end;
 		}
 
                 sbk_crypto_cipher_init(est, otk, sizeof(otk), bcnt);
-		sbk_crypto_cipher(est, eb, sizeof(eb));
-                while ((len != 0U) && ((offset - boff) < sizeof(eb))) {
-			(*data8) = eb[offset - boff];
+		sbk_crypto_cipher(cbuf, dbuf, bsize, est);
+                while ((len != 0U) && ((offset - boff) < bsize)) {
+			(*data8) = cbuf[offset - boff];
                         data8++;
                         offset++;
                         len--;

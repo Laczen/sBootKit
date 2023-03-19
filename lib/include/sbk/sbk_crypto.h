@@ -114,11 +114,12 @@ void sbk_crypto_cipher_init(void *state, const void *km, size_t km_size,
  *
  * cipher the data (this erases the state).
  *
+ * @param out: ciphered msg
+ * @param in: msg
+ * @param len: msg size
  * @param state: cipher state
- * @param data: data ciphered during operation
- * @param len: data size
  */
-void sbk_crypto_cipher(void *state, void *data, size_t len);
+void sbk_crypto_cipher(void *out, const void *in, size_t len, void *state);
 
 /**
  * @}

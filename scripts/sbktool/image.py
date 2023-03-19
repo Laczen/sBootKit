@@ -241,7 +241,7 @@ class Image():
     def show(self, data):
         print('\\x' + '\\x'.join(format(x, '02x') for x in data))
 
-    def create(self, bootkey, loadkey, confirm, encrypt):
+    def create(self, fslkey, updkey, confirm, encrypt):
 
         if encrypt:
             self.flags |= SBK_IMAGE_FLAG_ENCRYPTED
@@ -252,18 +252,18 @@ class Image():
         meta_offset = self.add_auth()
         self.add_meta(meta_offset)
 
-        km = HKDF(bootkey.get_private_key_bytearray(), 44, self.salt, SHA256, 1, SBK_IMAGE_AUTH_CTX)
+        km = HKDF(fslkey.get_private_key_bytearray(), 44, self.salt, SHA256, 1, SBK_IMAGE_AUTH_CTX)
         h = HMAC.new(km, digestmod=SHA256)
         h.update(self.payload[meta_offset:])
         self.fsl_fhmac = h.digest()
 
-        km = HKDF(loadkey.get_private_key_bytearray(), 44, self.salt, SHA256, 1, SBK_IMAGE_AUTH_CTX)
+        km = HKDF(updkey.get_private_key_bytearray(), 44, self.salt, SHA256, 1, SBK_IMAGE_AUTH_CTX)
         h = HMAC.new(km, digestmod=SHA256)
         h.update(self.payload[meta_offset:self.hdrsize])
         self.ldr_shmac = h.digest()
 
         if encrypt:
-            ekm = HKDF(loadkey.get_private_key_bytearray(), 44, self.salt, SHA256, 1, SBK_IMAGE_ENCR_CTX)
+            ekm = HKDF(updkey.get_private_key_bytearray(), 44, self.salt, SHA256, 1, SBK_IMAGE_ENCR_CTX)
             cipher = ChaCha20.new(key=ekm[0:32], nonce=ekm[32:44])
             self.payload[self.hdrsize:]=cipher.encrypt(self.payload[self.hdrsize:])
 

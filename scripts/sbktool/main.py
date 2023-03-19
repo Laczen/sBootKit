@@ -163,26 +163,26 @@ class BasedIntParamType(click.ParamType):
 @click.option('-dep','--dependency', multiple=True, type = str,
               callback = convert_image_dep,
               help = 'Image dependency, image address:version range')
-@click.option('-bk','--bootkey', metavar = 'filename', required = True,
-              help = 'Authenticate image utilizing the provided boot key')
-@click.option('-lk','--loadkey', metavar = 'filename', required = True,
-              help = 'Authenticate image utilizing the provided loader key')
+@click.option('-fk','--fslkey', metavar = 'filename', required = True,
+              help = 'First stage loader authentication using the provided key')
+@click.option('-uk','--updkey', metavar = 'filename', required = True,
+              help = 'Updater authentication/encryption using the provided key')
 @click.option('-c','--confirm', is_flag = True, help = 'create confirmed image')
 @click.option('-e','--encrypt', is_flag = True, help = 'create encrypted image')
 @click.option('-tst', '--test-image', is_flag = True,
               help = 'generate test image as c file')
 @click.command(help='''Create a image for use with sBootKit\n
                INFILE and OUTFILE are of type hex''')
-def create(align, hdrsize, version, product, dependency, bootkey, loadkey,
+def create(align, hdrsize, version, product, dependency, fslkey, updkey,
            confirm, encrypt, test_image, infile, outfile, endian):
-    bootkey = load_key(bootkey)
-    loadkey = load_key(loadkey)
-    if (bootkey is not None) and (loadkey is not None):
+    fslkey = load_key(fslkey)
+    updkey = load_key(updkey)
+    if (fslkey is not None) and (updkey is not None):
         img = image.Image(hdrsize = hdrsize, version = decode_version(version),
                           product_dep = product, image_dep = dependency,
                           endian = endian, align = align, type = type)
         img.load(infile)
-        img.create(bootkey, loadkey, confirm, encrypt)
+        img.create(fslkey, updkey, confirm, encrypt)
         if outfile is not None:
             img.save(outfile)
 

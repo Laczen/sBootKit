@@ -17,19 +17,6 @@
 #include "sbk/sbk_product.h"
 #include "sbk/sbk_image.h"
 
-#ifndef CONFIG_PRODUCT_NAME
-#define CONFIG_PRODUCT_NAME "TEST"
-#endif
-#ifndef CONFIG_PRODUCT_VER_MAJ
-#define CONFIG_PRODUCT_VER_MAJ 0
-#endif
-#ifndef CONFIG_PRODUCT_VER_MIN
-#define CONFIG_PRODUCT_VER_MIN 0
-#endif
-#ifndef CONFIG_PRODUCT_VER_REV
-#define CONFIG_PRODUCT_VER_REV 0
-#endif
-
 #define FLASH_OFFSET CONFIG_FLASH_BASE_ADDRESS
 
 #define SLOT0_NODE		DT_NODELABEL(slot0_partition)
@@ -47,8 +34,6 @@
 #define BL_SHARED_SRAM_SECT	LINKER_DT_NODE_REGION_NAME(BL_SHARED_SRAM_NODE)
 #define BL_SHARED_SRAM_ADDR	DT_REG_ADDR(BL_SHARED_SRAM_NODE)
 #define BL_SHARED_SRAM_SIZE	DT_REG_SIZE(BL_SHARED_SRAM_NODE)
-
-#define BOOT_RETRIES 4
 
 /**
  * @brief shared data format definition
@@ -89,13 +74,25 @@ static int read(const void *ctx, unsigned long off, void *data, size_t len)
 
 static int prog(const void *ctx, unsigned long off, const void *data, size_t len)
 {
-        /* The secure First Stage Loader does not program */
-        return 0;
+        const struct flash_slot_ctx *sctx = (const struct flash_slot_ctx *)ctx;
+        int rc;
+
+        if (off == 0U) {
+                rc = 0;//flash_erase(sctx->dev, sctx->off + off, 131072);
+                //SBK_LOG_DBG("Erased sector at %lx [%d]", sctx->off + off, rc);
+                if (rc != 0) {
+                        goto end;
+                }
+        }
+
+        rc = flash_write(sctx->dev, sctx->off + off, data, len);
+        //SBK_LOG_DBG("Written %d bytes to %lx [%d]", len, sctx->off + off, rc);
+end:
+        return rc;
 }
 
 static int sync(const void *ctx)
 {
-        /* The secure First Stage Loader does not program */
         return 0;
 }
 
@@ -129,72 +126,14 @@ static int slot_init(struct sbk_os_slot *slot, unsigned int slot_no)
 }
 
 int (*sbk_os_slot_init)(struct sbk_os_slot *slot, unsigned int slot_no) = slot_init;
-extern void jump_image(unsigned long address);
 struct sbk_shared_data shared_data Z_GENERIC_SECTION(BL_SHARED_SRAM);
 
 void main(void)
 {
-        uint32_t product_hash;
-
-        SBK_LOG_DBG("Welcome...");
-        product_hash = sbk_product_djb2_hash(CONFIG_PRODUCT_NAME,
-                                             sizeof(CONFIG_PRODUCT_NAME));
-
-        if ((shared_data.product_hash != product_hash) ||
-            (shared_data.bcnt > BOOT_RETRIES) ||
-            (shared_data.bslot >= ARRAY_SIZE(slots))) {
-                shared_data.product_hash = product_hash;
-                shared_data.product_ver.major = CONFIG_PRODUCT_VER_MAJ;
-                shared_data.product_ver.minor = CONFIG_PRODUCT_VER_MIN;
-                shared_data.product_ver.revision = CONFIG_PRODUCT_VER_REV;
-                shared_data.bslot = 0U;
-                shared_data.bcnt = 0U;
-        }
-
-        sbk_product_init_hash(&shared_data.product_hash);
-        sbk_product_init_version(&shared_data.product_ver);
-
-        if (shared_data.bcnt == BOOT_RETRIES) {
-                shared_data.bslot++;
-                shared_data.bcnt = 0U;
-        }
-
-        unsigned long address;
-        int rc;
-
-        for (uint32_t i = 0; i < ARRAY_SIZE(slots); i++) {
-                struct sbk_os_slot slot;
-                struct sbk_image image = {
-                        .slot = &slot,
-                };
-
-                if (shared_data.bslot >= ARRAY_SIZE(slots)) {
-                        shared_data.bslot = 0U;
-                }
-
-                SBK_LOG_DBG("Testing slot %d", shared_data.bslot);
-
-                rc = sbk_os_slot_open(image.slot, shared_data.bslot);
-                if (rc != 0) {
-                        shared_data.bslot = 0U;
-                        continue;
-                }
-
-                shared_data.bcnt++;
-                rc = sbk_image_bootable(&image, &address, &shared_data.bcnt);
-                if (rc != 0) {
-                        SBK_LOG_DBG("Failed booting image in slot %d",
-                                    shared_data.bslot);
-
-                        shared_data.bslot++;
-                        shared_data.bcnt = 0U;
-                        continue;
-                }
-                SBK_LOG_DBG("Jumping to address: %lx", address);
-                jump_image(address);
-        }
-
-        SBK_LOG_DBG("No bootable image found");
-
-        while(1);
+        SBK_LOG_INF("Welcome to %x version %d.%d-%d", shared_data.product_hash,
+                shared_data.product_ver.major, 
+                shared_data.product_ver.minor,
+                shared_data.product_ver.revision);
+        SBK_LOG_INF("Running from slot %d", shared_data.bslot);
+        SBK_LOG_INF("Boot retries %d", shared_data.bcnt);
 }

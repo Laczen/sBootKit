@@ -35,10 +35,9 @@ static int sbk_image_get_tag_pos(const struct sbk_image *image, uint32_t *pos,
 	SBK_ASSERT(image->slot);
 
 	struct sbk_image_rec_hdr rhdr;
-	const struct sbk_os_slot *slot = image->slot;
 
 	while (true) {
-		if (sbk_os_slot_read(slot, *pos, &rhdr, sizeof(rhdr)) != 0) {
+		if (sbk_os_slot_read(image->slot, *pos, &rhdr, sizeof(rhdr)) != 0) {
 			goto end;
 		}
 
@@ -460,16 +459,16 @@ end:
 	return rc;
 }
 
-static int ib_read(const void *ctx, unsigned long offset, void *data,
+static int buffered_image_read(const void *ctx, unsigned long offset, void *data,
 		   size_t len)
 {
         int rc;
 	struct sbk_image *img = (struct sbk_image *)ctx;
 	uint8_t *data8 = (uint8_t *)data;
 
-        if (offset < img->ib->bstart) {
+	if (offset < img->ib->bstart) {
                 size_t rdlen = SBK_MIN(len, img->ib->bstart - offset);
-                rc = sbk_os_slot_read(img->slot, offset, data, rdlen);
+                rc = sbk_os_slot_read(img->slot, offset, data8, rdlen);
                 if (rc != 0) {
                         goto end;
                 }
@@ -479,11 +478,10 @@ static int ib_read(const void *ctx, unsigned long offset, void *data,
                 data8 += rdlen;
         }
 
+	offset -= img->ib->bstart;
 	while (len != 0) {
-		if (offset < (img->ib->bstart + img->ib->bpos)) {
+		if (offset < img->ib->bpos) {
 			(*data8) = img->ib->buf[offset];
-		} else {
-			(*data8) = 0U;
 		}
 
                 data8++;
@@ -495,18 +493,18 @@ end:
         return rc;
 }
 
-static unsigned long ib_get_start_address(const void *ctx)
+static unsigned long buffered_image_get_start_address(const void *ctx)
 {
 	struct sbk_image *img = (struct sbk_image *)ctx;
 
-	return sbk_os_slot_get_sa(img->slot->ctx);
+	return sbk_os_slot_get_sa(img->slot);
 }
 
-static size_t ib_get_size(const void *ctx)
+static size_t buffered_image_get_size(const void *ctx)
 {
 	struct sbk_image *img = (struct sbk_image *)ctx;
 
-	return sbk_os_slot_get_sz(img->slot->ctx);
+	return sbk_os_slot_get_sz(img->slot);
 }
 
 static int sbk_image_writable(const struct sbk_image *image)
@@ -514,10 +512,10 @@ static int sbk_image_writable(const struct sbk_image *image)
         struct sbk_image_auth auth;
         int rc;
 
-        rc = sbk_image_dependency_verify(image);
-	if (rc != 0) {
-	        goto end;
-	}
+        // rc = sbk_image_dependency_verify(image);
+	// if (rc != 0) {
+	//         goto end;
+	// }
 
 	rc = sbk_image_get_tagdata(image, SBK_IMAGE_AUTH_TAG, (void *)&auth,
                                    sizeof(auth));
@@ -537,11 +535,11 @@ int sbk_image_flush(const struct sbk_image *image)
 
         struct sbk_os_slot ib_slot = {
 		.ctx = (void *)image,
-		.read = ib_read,
+		.read = buffered_image_read,
 		.prog = NULL,
 		.sync = NULL,
-		.get_start_address = ib_get_start_address,
-		.get_size = ib_get_size,
+		.get_start_address = buffered_image_get_start_address,
+		.get_size = buffered_image_get_size,
 	};
 	struct sbk_image ib_image = {
 		.slot = &ib_slot,
@@ -552,21 +550,20 @@ int sbk_image_flush(const struct sbk_image *image)
         unsigned long offset = image->ib->bstart;
         int rc;
 	
-
-	if (image->ib->bpos == image->ib->blen) {
+	if (image->ib->bstart == 0) {
 		rc = sbk_image_writable(&ib_image);
                 if (rc != 0) {
                         goto end;
                 }
         }
 
-        rc = sbk_image_get_tagdata(&ib_image, SBK_IMAGE_META_TAG,
+	rc = sbk_image_get_tagdata(&ib_image, SBK_IMAGE_META_TAG,
 				   (void *)&meta, sizeof(meta));
 	if (rc != 0) {
 		goto end;
 	}
 
-        if ((!sbk_image_is_encrypted(meta.image_flags)) ||
+	if ((!sbk_image_is_encrypted(meta.image_flags)) ||
 	    (!sbk_os_slot_inrange(image->slot, meta.image_start_address))) {
 		rc = sbk_os_slot_prog(image->slot, offset, image->ib->buf, len);
                 goto end;

@@ -12,6 +12,8 @@ zephyr_include_directories(
     ${CMAKE_CURRENT_LIST_DIR}/include
 )
 
-FILE(GLOB app_sources src/main.c src/ldrshell.c)
+zephyr_linker_sources(DATA_SECTIONS iterables.ld)
+
+FILE(GLOB app_sources src/main.c src/uart_handle.c src/tshell.c)
 
 target_sources(app PRIVATE ${app_sources})

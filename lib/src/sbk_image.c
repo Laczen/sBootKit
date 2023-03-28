@@ -6,7 +6,6 @@
 #include "sbk/sbk_util.h"
 #include "sbk/sbk_crypto.h"
 #include "sbk/sbk_os.h"
-#include "sbk/sbk_product.h"
 #include "sbk/sbk_image.h"
 #include <string.h>
 
@@ -272,11 +271,18 @@ static int sbk_image_image_dependency_verify(const struct sbk_image *image)
 		rc = sbk_image_get_tagdata(&dimage, SBK_IMAGE_META_TAG,
 					   (void *)&meta, sizeof(meta));
 
-		if (!sbk_version_in_range(&meta.image_version, &di.vrange)) {
+		if (rc != 0) {
+			if (dcnt == 1) { /* override downgrade protection */
+				mcnt++;
+				rc = 0;
+			}
 			continue;
 		}
 
-		mcnt++;
+		if (sbk_version_in_range(&meta.image_version, &di.vrange)) {
+			mcnt++;
+		}
+
 	}
 
 	if (mcnt != dcnt) {
@@ -514,10 +520,10 @@ static int sbk_image_writable(const struct sbk_image *image)
         struct sbk_image_auth auth;
         int rc;
 
-        // rc = sbk_image_dependency_verify(image);
-	// if (rc != 0) {
-	//         goto end;
-	// }
+        rc = sbk_image_dependency_verify(image);
+	if (rc != 0) {
+	        goto end;
+	}
 
 	rc = sbk_image_get_tagdata(image, SBK_IMAGE_AUTH_TAG, (void *)&auth,
                                    sizeof(auth));

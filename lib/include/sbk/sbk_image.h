@@ -13,6 +13,8 @@ extern "C" {
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "sbk/sbk_product.h"
+
 #define SBK_IMAGE_AUTH_TAG              0x7FFF
 #define SBK_IMAGE_META_TAG              0x8000
 #define SBK_IMAGE_FLAG_CONFIRMED        0x0001
@@ -22,8 +24,7 @@ extern "C" {
 #define SBK_IMAGE_AUTH_CONTEXT  "SBK AUTHENTICATE"
 #define SBK_IMAGE_ENCR_CONTEXT  "SBK ENCRYPT"
 
-struct sbk_version;
-struct sbk_version_range;
+struct sbk_os_slot;
 
 struct __attribute__((packed)) sbk_image_rec_hdr {
         uint16_t tag; /* odd-parity tag */
@@ -65,8 +66,6 @@ struct __attribute__((packed)) sbk_product_dep_info {
         uint16_t next_tag;
         uint16_t pad16;
 };
-
-struct sbk_os_slot;
 
 struct sbk_image_buffer {
         uint8_t *buf;           /* pointer to buffer */

@@ -19,10 +19,11 @@ import click
 import getpass
 import sbktool.keys as keys
 from sbktool import image
+from sbktool import upload as upl
 from sbktool.version import decode_version
 import sys
 
-#sys.tracebacklimit = 0
+sys.tracebacklimit = 0
 
 def gen_pk(keyfile, passwd):
     keys.PK.generate().export_private(keyfile, passwd=passwd)
@@ -198,6 +199,18 @@ def create(align, hdrsize, version, product, dependency, fslkey, updkey,
     else:
         print("Wrong bootkey or loadkey provided")
 
+@click.argument('file')
+@click.option('-d', '--device', type = str, default = None,
+              help = 'Serial port device')
+@click.option('-b', '--baudrate', type = int, default = 115200,
+              help = 'Serial port baudrate')
+@click.option('-s', '--slot', type = int, default = 0,
+              help = 'Slot to upload to')
+@click.command(help='''Send hex file to serial loader\n
+               FILE should be of type hex''')
+def upload(device, baudrate, slot, file):
+    upl.upload(device, baudrate, slot, file)
+
 class AliasesGroup(click.Group):
 
     _aliases = {
@@ -226,6 +239,7 @@ def sbktool():
 sbktool.add_command(genkey)
 sbktool.add_command(geninclude)
 sbktool.add_command(create)
+sbktool.add_command(upload)
 
 
 if __name__ == '__main__':

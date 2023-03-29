@@ -80,8 +80,7 @@ struct tshell {
 		.name = STRINGIFY(_name) ,				       \
 		.tsh_data = & _name ## _tshell_data,			       \
 	};								       \
-	TSHELL_REGISTER_CMD(_name, help, tshell_help_handler, 		       \
-			    "List all commands")
+	TSHELL_REGISTER_CMD(_name, help, tshell_help_handler, "List all commands")
 
 
 /**

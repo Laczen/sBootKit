@@ -1,1 +1,1 @@
-ITERABLE_SECTION_RAM(tshell_command, 4)
+ITERABLE_SECTION_ROM(tshell_command, 4)

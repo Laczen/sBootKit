@@ -93,7 +93,6 @@ static int prog(const void *ctx, unsigned long off, const void *data, size_t len
         }
 
         rc = flash_write(sctx->dev, sctx->off + off, data, len);
-        //SBK_LOG_DBG("Written %d bytes to %lx [%d]", len, sctx->off + off, rc);
 end:
         return rc;
 }
@@ -190,6 +189,8 @@ void cli_load(const struct shell *sh, uint8_t *data, size_t len)
         }
 }
 
+void main(void);
+
 int cli_command_load(const struct shell *sh, int argc, char *argv[]) {
         uint32_t slot;
 
@@ -207,6 +208,12 @@ int cli_command_load(const struct shell *sh, int argc, char *argv[]) {
         }
 
         if (sbk_os_slot_get_sz(&ldslot) < ldsize) {
+                shell_print(sh, "Image to large");
+                return 0;
+        }
+
+        if (sbk_os_slot_inrange(&ldslot, (unsigned long)main)) {
+                shell_print(sh, "Cannot upgrade running image");
                 return 0;
         }
 
@@ -232,17 +239,22 @@ int cli_command_ilist(const struct shell *sh, int argc, char *argv[]) {
 	
         while (true) {
                 int rc;
+                bool running;
 
                 rc = sbk_os_slot_open(image.slot, slot_no);
                 if (rc != 0) {
                         break;
                 }
+                
                 rc = sbk_image_get_version(&image, &version);
                 if (rc != 0) {
                         break;
                 }
-                shell_print(sh, "Slot %d contains version %d.%d-%d", slot_no,
-                            version.major, version.minor, version.revision);
+
+                running = sbk_os_slot_inrange(image.slot, (unsigned long)main);
+                shell_print(sh, "Slot %d contains version %d.%d-%d %s", slot_no,
+                            version.major, version.minor, version.revision,
+                            running ? "(running)" : "");
                 slot_no++;
         }
 
@@ -267,4 +279,5 @@ void main(void)
                 shared_data.product_ver.revision);
         SBK_LOG_INF("Running from slot %d", shared_data.bslot);
         SBK_LOG_INF("Boot retries %d", shared_data.bcnt);
+        SBK_LOG_INF("Main located at: %p", main);
 }

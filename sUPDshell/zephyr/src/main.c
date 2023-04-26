@@ -13,14 +13,12 @@
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/linker/devicetree_regions.h>
+#include <zephyr/shell/shell.h>
 
 #include "sbk/sbk_image.h"
 #include "sbk/sbk_os.h"
 #include "sbk/sbk_util.h"
 #include "sbk/sbk_product.h"
-
-#include "tshell.h"
-#include "uart_handle.h"
 
 #define FLASH_OFFSET CONFIG_FLASH_BASE_ADDRESS
 
@@ -142,8 +140,8 @@ struct sbk_shared_data shared_data Z_GENERIC_SECTION(BL_SHARED_SRAM);
  * 
  */
 
-int cli_command_reboot(const struct tshell *tsh, int argc, char *argv[]) {
-        tshell_put(tsh, "Rebooting");
+int cli_command_reboot(const struct shell *sh, int argc, char *argv[]) {
+        shell_print(sh, "Rebooting");
         return 0;
 }
 
@@ -162,11 +160,11 @@ static struct sbk_image ldimage = {
         .ib = &ldimage_buf,
 };
 
-void cli_load(const struct tshell *tsh, const char *data, size_t len)
+void cli_load(const struct shell *sh, uint8_t *data, size_t len)
 {
         if (ldok) {
                 if (sbk_image_write(&ldimage, ldoffset, data, len) != 0) {
-                        tshell_put(tsh,"Write failed");
+                        shell_print(sh, "Write failed");
                         ldok = false;
                 }
         }
@@ -175,24 +173,28 @@ void cli_load(const struct tshell *tsh, const char *data, size_t len)
         ldoffset += len;
 
         if (ldsize == 0U) {
-                if (sbk_image_flush(&ldimage) == 0) {
-                        tshell_put(tsh, "Write done");
+                if ((ldok) && (sbk_image_flush(&ldimage) == 0)) {
+                        shell_print(sh, "Write done");
+
+                } else {
+                        shell_print(sh, "Write error");
                 }
 
-                tshell_set_bypass(tsh, NULL);
+                shell_set_bypass(sh, NULL);
                 return;
         }
 
         if ((ldoffset % 256) == 0) {
-                tshell_put(tsh, "OK");
+                shell_print(sh, "off: %ld, rs: %d OK",
+                            ldimage_buf.bstart + ldimage_buf.bpos, ldsize);
         }
 }
 
-int cli_command_load(const struct tshell *tsh, int argc, char *argv[]) {
+int cli_command_load(const struct shell *sh, int argc, char *argv[]) {
         uint32_t slot;
 
         if (argc < 2) {
-                tshell_put(tsh, "Insufficient arguments");
+                shell_print(sh, "Insufficient arguments");
                 return 0;
         }
 
@@ -200,7 +202,7 @@ int cli_command_load(const struct tshell *tsh, int argc, char *argv[]) {
         ldsize = strtoul(argv[2], NULL, 0);
 
         if (sbk_os_slot_open(&ldslot, slot) != 0) {
-                tshell_put(tsh, "Bad slot specified");
+                shell_print(sh, "Bad slot specified");
                 return 0;
         }
 
@@ -209,19 +211,18 @@ int cli_command_load(const struct tshell *tsh, int argc, char *argv[]) {
         }
 
         ldoffset = 0U;
+        ldimage_buf.bstart = 0U;
+        ldimage_buf.bpos = 0U;
         ldok = true;
 
-        char line[81];
-
-        snprintf(line, sizeof(line), "Writing %d bytes to slot %d ...", ldsize, 
-                 slot);
-        tshell_put(tsh, line);
-        tshell_set_bypass(tsh, cli_load);
-        tshell_put(tsh, "OK");
+        shell_print(sh, "Writing %d bytes to slot %d ...", ldsize, slot);
+        shell_print(sh, "OK");
+        shell_set_bypass(sh, NULL);
+        shell_set_bypass(sh, cli_load);
         return 0;
 }
 
-int cli_command_ilist(const struct tshell *tsh, int argc, char *argv[]) {
+int cli_command_ilist(const struct shell *sh, int argc, char *argv[]) {
         uint32_t slot_no = 0;
         struct sbk_os_slot slot;
         struct sbk_image image = {
@@ -230,7 +231,6 @@ int cli_command_ilist(const struct tshell *tsh, int argc, char *argv[]) {
         struct sbk_version version;
 	
         while (true) {
-                char line[81];
                 int rc;
 
                 rc = sbk_os_slot_open(image.slot, slot_no);
@@ -241,10 +241,8 @@ int cli_command_ilist(const struct tshell *tsh, int argc, char *argv[]) {
                 if (rc != 0) {
                         break;
                 }
-                snprintf(line, sizeof(line),
-                         "Slot %d contains version %d.%d-%d", slot_no,
-                         version.major, version.minor, version.revision);
-                tshell_put(tsh, line);
+                shell_print(sh, "Slot %d contains version %d.%d-%d", slot_no,
+                            version.major, version.minor, version.revision);
                 slot_no++;
         }
 
@@ -252,27 +250,21 @@ int cli_command_ilist(const struct tshell *tsh, int argc, char *argv[]) {
 
 }
 
-UART_HANDLE_DECLARE(uhndl, DEVICE_DT_GET(DT_CHOSEN(zephyr_console)), 512);
-TSHELL_DECLARE(tsh, 64);
+SHELL_STATIC_SUBCMD_SET_CREATE(
+        image,
+        SHELL_CMD(load, NULL, "Upload new firmware", cli_command_load),
+        SHELL_CMD(list, NULL, "List available images", cli_command_ilist),
+        SHELL_SUBCMD_SET_END
+);
 
-TSHELL_REGISTER_CMD(tsh, list, cli_command_ilist, "List images");
-TSHELL_REGISTER_CMD(tsh, load, cli_command_load, "Load image to slot: [load slot_no bytes]");
-TSHELL_REGISTER_CMD(tsh, reboot, cli_command_reboot, "Reboot device");
+SHELL_CMD_REGISTER(image, &image, "Working with images", NULL);
 
 void main(void)
-{
-            
+{          
         SBK_LOG_INF("Welcome to %x version %d.%d-%d", shared_data.product_hash,
                 shared_data.product_ver.major, 
                 shared_data.product_ver.minor,
                 shared_data.product_ver.revision);
         SBK_LOG_INF("Running from slot %d", shared_data.bslot);
         SBK_LOG_INF("Boot retries %d", shared_data.bcnt);
-
-        uart_handle_register_rx_cb(&uhndl, tshell_receive, (void *)&tsh);
-        tshell_register_send_cb(&tsh, uart_handle_tx, (void *)&uhndl);
-
-        uart_handle_start(&uhndl);
-        tshell_start(&tsh);
-
 }

@@ -6,14 +6,12 @@ cmake_minimum_required(VERSION 3.13.1)
 # http://docs.zephyrproject.org/application/application.html
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
-project(sFSL)
+project(sUPDshell)
 
 zephyr_include_directories(
     ${CMAKE_CURRENT_LIST_DIR}/include
 )
 
-zephyr_linker_sources(SECTIONS iterables.ld)
-
-FILE(GLOB app_sources src/main.c src/uart_handle.c src/tshell.c)
+FILE(GLOB app_sources src/main.c)
 
 target_sources(app PRIVATE ${app_sources})

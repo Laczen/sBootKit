@@ -46,27 +46,27 @@ def upload(device, baudrate, slot, file):
                 raise ValueError(msg)
 
         s = serial.Serial(port[0], baudrate)
-        s.timeout = 1
-        msg = "\r\n"
+        s.timeout = 2
+        msg = "\n"
         s.write(msg.encode())
         a = s.read(32767)
         print(a)
-        msg = "load " + str(slot) + " " + str(len(payload)) + "\r"
+        msg = "image load " + str(slot) + " " + str(len(payload)) + "\n"
         print(msg)
         s.write(msg.encode())
-        time.sleep(0.5)
+        a = s.read_until(b'\r\n')
         #
         pos = 0
         length = len(payload)
         while length > 0:
                 a = s.read_until(b'OK\r\n')
-                print(pos)
+                print("resp: " + a.decode())
                 wrlen = min(length, 256)
                 data = payload[pos: pos + wrlen]
                 b = s.write(data)
                 length -= wrlen
                 pos += wrlen
 
-        time.sleep(0.5)
-        a = s.read(32767)
-        print(a)
+        a = s.read_until(b'\r\n')
+        print(a.decode())
+        s.close()

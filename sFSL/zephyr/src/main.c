@@ -12,7 +12,7 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/linker/devicetree_regions.h>
 
-#include "sbk/sbk_os.h"
+#include "sbk/sbk_slot.h"
 #include "sbk/sbk_util.h"
 #include "sbk/sbk_product.h"
 #include "sbk/sbk_image.h"
@@ -87,18 +87,6 @@ static int read(const void *ctx, unsigned long off, void *data, size_t len)
         return flash_read(sctx->dev, sctx->off + off, data, len);
 }
 
-static int prog(const void *ctx, unsigned long off, const void *data, size_t len)
-{
-        /* The secure First Stage Loader does not program */
-        return 0;
-}
-
-static int sync(const void *ctx)
-{
-        /* The secure First Stage Loader does not program */
-        return 0;
-}
-
 static unsigned long get_start_address(const void *ctx)
 {
         const struct flash_slot_ctx *sctx = (const struct flash_slot_ctx *)ctx;
@@ -113,7 +101,7 @@ static size_t get_size(const void *ctx)
         return sctx->size;
 }
 
-static int slot_init(struct sbk_os_slot *slot, unsigned int slot_no)
+static int slot_get(struct sbk_slot *slot, unsigned int slot_no)
 {
         if (slot_no >= ARRAY_SIZE(slots)) {
                 return -SBK_EC_ENOENT;
@@ -121,14 +109,12 @@ static int slot_init(struct sbk_os_slot *slot, unsigned int slot_no)
 
         slot->ctx = (void *)&slots[slot_no];
         slot->read = read;
-        slot->prog = prog;
-        slot->sync = sync;
         slot->get_start_address = get_start_address;
         slot->get_size = get_size;
         return 0;
 }
 
-int (*sbk_os_slot_init)(struct sbk_os_slot *slot, unsigned int slot_no) = slot_init;
+int (*sbk_slot_get)(struct sbk_slot *slot, unsigned int slot_no) = slot_get;
 extern void jump_image(unsigned long address);
 struct sbk_shared_data shared_data Z_GENERIC_SECTION(BL_SHARED_SRAM);
 
@@ -163,25 +149,28 @@ void main(void)
         int rc;
 
         for (uint32_t i = 0; i < ARRAY_SIZE(slots); i++) {
-                struct sbk_os_slot slot;
-                struct sbk_image image = {
-                        .slot = &slot,
-                };
-
+                struct sbk_slot slot;
+                
                 if (shared_data.bslot >= ARRAY_SIZE(slots)) {
                         shared_data.bslot = 0U;
                 }
 
                 SBK_LOG_DBG("Testing slot %d", shared_data.bslot);
 
-                rc = sbk_os_slot_open(image.slot, shared_data.bslot);
+                rc = sbk_slot_get(&slot, shared_data.bslot);
                 if (rc != 0) {
-                        shared_data.bslot = 0U;
+                        shared_data.bslot++;
+                        continue;
+                }
+
+                rc = sbk_slot_open(&slot);
+                if (rc != 0) {
+                        shared_data.bslot++;
                         continue;
                 }
 
                 shared_data.bcnt++;
-                rc = sbk_image_bootable(&image, &address, &shared_data.bcnt);
+                rc = sbk_image_bootable(&slot, &address, &shared_data.bcnt);
                 if (rc != 0) {
                         SBK_LOG_DBG("Failed booting image in slot %d",
                                     shared_data.bslot);
@@ -190,6 +179,8 @@ void main(void)
                         shared_data.bcnt = 0U;
                         continue;
                 }
+
+                (void)sbk_slot_close(&slot);
                 SBK_LOG_DBG("Jumping to address: %lx", address);
                 jump_image(address);
         }

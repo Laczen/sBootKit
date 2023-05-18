@@ -51,7 +51,7 @@ def upload(device, baudrate, slot, file):
         s.write(msg.encode())
         a = s.read(32767)
         print(a)
-        msg = "image load " + str(slot) + " " + str(len(payload)) + "\n"
+        msg = "image upload " + str(slot) + " " + str(len(payload)) + "\n"
         print(msg)
         s.write(msg.encode())
         a = s.read_until(b'\r\n')

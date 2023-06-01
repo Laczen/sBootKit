@@ -99,18 +99,6 @@ int sbk_image_write(const struct sbk_slot *slot, unsigned long offset,
                     const void *data, size_t len);
 
 /**
- * @brief sbk_image_dependency_verify
- *
- * Verifies that an image in a slot can run on the present product and that all
- * image dependencies are satisfied.
- *
- * @param slot: pointer to slot where the image resides
- * @retval -ERRNO errno code if error
- * @retval 0 if succesfull
- */
-int sbk_image_dependency_verify(const struct sbk_slot *slot);
-
-/**
  * @brief sbk_image_bootable
  *
  * Check if an image in a slot is bootable, this uses the key that is defined by
@@ -149,6 +137,18 @@ int sbk_image_get_version(const struct sbk_slot *slot,
  * @retval 0 if succesfull
  */
 int sbk_image_valid(const struct sbk_slot *slot);
+
+int sbk_image_hdr_valid(void *data, size_t len);
+// /**
+//  * @brief sbk_image_check_hdr
+//  *
+//  * Verifies the validity of an image in a slot using only the header
+//  *
+//  * @param slot: pointer to slot where the image resides
+//  * @retval -ERRNO errno code if error
+//  * @retval 0 if succesfull
+//  */
+// int sbk_image_check_hdr(const struct sbk_slot *slot);
 
 #ifdef __cplusplus
 }

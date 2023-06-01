@@ -25,21 +25,20 @@ struct sbk_slot {
         /* opaque context pointer */
         void *ctx;
 
+        /* slot size */
+        size_t size;
+
         /* read from the slot (needs implementation) */
         int (*read)(const void *ctx, unsigned long off, void *data, size_t len);
 
-        /* get the slot start address (needs implementation) */
-        unsigned long (*get_start_address)(const void *ctx);
-
-        /* get the slot size (needs implementation) */
-        size_t (*get_size)(const void *ctx);
-
-        /* open a slot (optional implementation), any required initialisation needs
-         * to be performed in this routine */
+        /* open a slot (optional implementation), any required initialisation
+         * needs to be performed in this routine
+         */
         int (*open)(const void *ctx);
 
         /* close a slot (optional implementation), any required synching of
-         * buffers needs to be performed in this routine */
+         * buffers needs to be performed in this routine
+         */
         int (*close)(const void *ctx);
 
         /* program to the slot (optional implementation), on devices that
@@ -48,6 +47,9 @@ struct sbk_slot {
          */
         int (*prog)(const void *ctx, unsigned long off, const void *data,
                     size_t len);
+
+        /* convert off to absolute address (optional implementation) */
+        int (*address)(const void *ctx, unsigned long off, unsigned long *addr);
 };
 
 /** @brief sbk_slot_get, needs to be provided by os
@@ -97,25 +99,12 @@ int sbk_slot_prog(const struct sbk_slot *slot, unsigned long off,
 int sbk_slot_close(const struct sbk_slot *slot);
 
 /**
- * @brief sbk_slot_get_sz
+ * @brief sbk_slot_address
  *
- * get a slot size
+ * translate offset to absolute address
  */
-size_t sbk_slot_get_sz(const struct sbk_slot *slot);
-
-/**
- * @brief sbk_slot_get_sa
- *
- * get a slot start address
- */
-unsigned long sbk_slot_get_sa(const struct sbk_slot *slot);
-
-/**
- * @brief sbk_slot_inrange
- *
- * check if an address belongs to a slot
- */
-bool sbk_slot_inrange(const struct sbk_slot *slot, unsigned long addr);
+int sbk_slot_address(const struct sbk_slot *slot, unsigned long off,
+                     unsigned long *address);
 
 #ifdef __cplusplus
 } /* extern "C" */

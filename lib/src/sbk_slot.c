@@ -13,37 +13,12 @@ int sbk_slot_read(const struct sbk_slot *slot, unsigned long off, void *data,
         SBK_ASSERT(slot);
         SBK_ASSERT(data);
         SBK_ASSERT(slot->read);
-        SBK_ASSERT(slot->get_size);
-
-        if (off + len > slot->get_size(slot->ctx)) {
+        
+        if (off + len > slot->size) {
                 return -SBK_EC_EIO;
         }
 
         return slot->read(slot->ctx, off, data, len);
-}
-
-size_t sbk_slot_get_sz(const struct sbk_slot *slot)
-{
-        SBK_ASSERT(slot);
-        SBK_ASSERT(slot->get_size);
-        return slot->get_size(slot->ctx);
-}
-
-unsigned long sbk_slot_get_sa(const struct sbk_slot *slot)
-{
-        SBK_ASSERT(slot);
-        SBK_ASSERT(slot->get_start_address);
-        return slot->get_start_address(slot->ctx);
-}
-
-bool sbk_slot_inrange(const struct sbk_slot *slot, unsigned long addr)
-{
-        SBK_ASSERT(slot);
-        SBK_ASSERT(slot->get_start_address);
-        SBK_ASSERT(slot->get_size);
-        void *ctx = slot->ctx;
-
-        return (addr - slot->get_start_address(ctx)) < slot->get_size(ctx);
 }
 
 int sbk_slot_open(struct sbk_slot *slot)
@@ -72,15 +47,26 @@ int sbk_slot_prog(const struct sbk_slot *slot, unsigned long off,
                   const void *data, size_t len)
 {
         SBK_ASSERT(slot);
-        SBK_ASSERT(slot->get_size);
-
-        if (off + len > slot->get_size(slot->ctx)) {
-                return -SBK_EC_EIO;
-        }
 
         if (slot->prog == NULL) {
                 return 0;
         }
 
+        if (off + len > slot->size) {
+                return -SBK_EC_EIO;
+        }
+
         return slot->prog(slot->ctx, off, data, len);
+}
+
+int sbk_slot_address(const struct sbk_slot *slot, unsigned long off,
+                     unsigned long *address)
+{
+        SBK_ASSERT(slot);
+
+        if (slot->address == NULL) {
+                return -SBK_EC_EINVAL;
+        }
+
+        return slot->address(slot->ctx, off, address);
 }

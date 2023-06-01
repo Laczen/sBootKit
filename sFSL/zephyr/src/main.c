@@ -87,18 +87,12 @@ static int read(const void *ctx, unsigned long off, void *data, size_t len)
         return flash_read(sctx->dev, sctx->off + off, data, len);
 }
 
-static unsigned long get_start_address(const void *ctx)
+static int address(const void *ctx, unsigned long off, unsigned long *address)
 {
         const struct flash_slot_ctx *sctx = (const struct flash_slot_ctx *)ctx;
 
-        return FLASH_OFFSET + sctx->off;
-}
-
-static size_t get_size(const void *ctx)
-{
-        const struct flash_slot_ctx *sctx = (const struct flash_slot_ctx *)ctx;
-
-        return sctx->size;
+        *address = FLASH_OFFSET + sctx->off;
+        return 0;
 }
 
 static int slot_get(struct sbk_slot *slot, unsigned int slot_no)
@@ -108,9 +102,12 @@ static int slot_get(struct sbk_slot *slot, unsigned int slot_no)
         }
 
         slot->ctx = (void *)&slots[slot_no];
+        slot->size = slots[slot_no].size;
         slot->read = read;
-        slot->get_start_address = get_start_address;
-        slot->get_size = get_size;
+        slot->address = address;
+        slot->open = NULL;
+        slot->close = NULL;
+        slot->prog = NULL;
         return 0;
 }
 

@@ -82,18 +82,12 @@ static int read(const void *ctx, unsigned long off, void *data, size_t len)
         return flash_read(sctx->dev, sctx->off + off, data, len);
 }
 
-static unsigned long get_start_address(const void *ctx)
+static int address(const void *ctx, unsigned long off, unsigned long *address)
 {
         const struct flash_slot_ctx *sctx = (const struct flash_slot_ctx *)ctx;
 
-        return FLASH_OFFSET + sctx->off;
-}
-
-static size_t get_size(const void *ctx)
-{
-        const struct flash_slot_ctx *sctx = (const struct flash_slot_ctx *)ctx;
-
-        return sctx->size;
+        *address = FLASH_OFFSET + sctx->off;
+        return 0;
 }
 
 static int prog(const void *ctx, unsigned long off, const void *data, size_t len)
@@ -120,14 +114,17 @@ static int slot_get(struct sbk_slot *slot, unsigned int slot_no)
         }
 
         slot->ctx = (void *)&slots[slot_no];
+        slot->size = slots[slot_no].size;
         slot->read = read;
         slot->prog = prog;
-        slot->get_start_address = get_start_address;
-        slot->get_size = get_size;
+        slot->address = address;
+        slot->open = NULL;
+        slot->close = NULL;
         return 0;
 }
 
 int (*sbk_slot_get)(struct sbk_slot *slot, unsigned int slot_no) = slot_get;
+
 
 /**
  * @brief Shell interface
@@ -162,6 +159,13 @@ void cli_upload_block(const struct shell *sh, uint8_t *data, size_t len)
                 ldsize -= cplen;
                 data += cplen;
 
+                if (ldoff == 512) {
+                        if (sbk_image_hdr_valid(img_buffer, ldoff) != 0) {
+                                shell_print(sh, "bad image");
+                                ldok = false;
+                        }
+                }
+
                 if (((boff == IMG_BUF_SIZE) || (ldsize == 0U)) && (ldok)) {
                         rc = sbk_image_write(&ldslot, wroff, img_buffer, boff);
                         if (rc != 0) {
@@ -180,9 +184,22 @@ void cli_upload_block(const struct shell *sh, uint8_t *data, size_t len)
         if ((ldoff % 256) == 0) {
                 shell_print(sh, "off: %ld, rs: %d OK", ldoff, ldsize);
         }
+
 }
 
 void main(void);
+
+static bool is_running(const struct sbk_slot *slt) {
+        const unsigned long ma = (unsigned long)main;
+        unsigned long saddr;
+        
+        if ((sbk_slot_address(slt, 0U, &saddr) != 0) ||
+            (saddr > ma) || ((saddr + slt->size) <= ma)) {
+                return false;
+        }
+
+        return true;
+}
 
 int cli_command_upload(const struct shell *sh, int argc, char *argv[]) {
         uint32_t slot;
@@ -205,12 +222,12 @@ int cli_command_upload(const struct shell *sh, int argc, char *argv[]) {
                 return 0;
         }
 
-        if (sbk_slot_get_sz(&ldslot) < ldsize) {
+        if (ldslot.size < ldsize) {
                 shell_print(sh, "Image to large");
                 return 0;
         }
 
-        if (sbk_slot_inrange(&ldslot, (unsigned long)main)) {
+        if (is_running(&ldslot)) {
                 shell_print(sh, "Cannot upgrade running image");
                 return 0;
         }
@@ -225,6 +242,10 @@ int cli_command_upload(const struct shell *sh, int argc, char *argv[]) {
         return 0;
 }
 
+static bool is_valid(const struct sbk_slot *slt) {
+        return (sbk_image_valid(slt) == 0);
+}
+
 int cli_command_list(const struct shell *sh, int argc, char *argv[]) {
         uint32_t slot_no = 0;
         struct sbk_slot slot;
@@ -232,9 +253,7 @@ int cli_command_list(const struct shell *sh, int argc, char *argv[]) {
 	
         while (true) {
                 int rc;
-                bool valid = false;
-                bool running;
-
+                
                 rc = sbk_slot_get(&slot, slot_no);
                 if (rc != 0) {
                         break;
@@ -250,15 +269,12 @@ int cli_command_list(const struct shell *sh, int argc, char *argv[]) {
                         break;
                 }
 
-                if (sbk_image_valid(&slot) == 0) {
-                        valid = true;
-                }
-
-                running = sbk_slot_inrange(&slot, (unsigned long)main);
                 shell_print(sh, "Slot %d contains version %d.%d-%d %s %s",
                             slot_no, version.major, version.minor,
-                            version.revision, running ? "(running)" : "",
-                            valid ? "(valid)" : "(invalid)");
+                            version.revision, 
+                            is_running(&slot) ? "(running)" : "",
+                            is_valid(&slot) ? "(valid)" : "(invalid)");
+                (void)sbk_slot_close(&slot);
                 slot_no++;
         }
 

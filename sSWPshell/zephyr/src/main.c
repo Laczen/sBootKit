@@ -32,6 +32,16 @@
 #define SLOT1_DEVICE	        DEVICE_DT_GET(SLOT1_MTD)
 #define SLOT1_OFFSET	        DT_REG_ADDR(SLOT1_NODE)
 #define SLOT1_SIZE              DT_REG_SIZE(SLOT1_NODE)
+#define SLOT0UPD_NODE		DT_NODELABEL(slot0upd_partition)
+#define SLOT0UPD_MTD            DT_MTD_FROM_FIXED_PARTITION(SLOT0UPD_NODE)
+#define SLOT0UPD_DEVICE	        DEVICE_DT_GET(SLOT0UPD_MTD)
+#define SLOT0UPD_OFFSET	        DT_REG_ADDR(SLOT0UPD_NODE)
+#define SLOT0UPD_SIZE           DT_REG_SIZE(SLOT0UPD_NODE)
+#define SLOT0TMP_NODE		DT_NODELABEL(slot0tmp_partition)
+#define SLOT0TMP_MTD            DT_MTD_FROM_FIXED_PARTITION(SLOT0TMP_NODE)
+#define SLOT0TMP_DEVICE	        DEVICE_DT_GET(SLOT0TMP_MTD)
+#define SLOT0TMP_OFFSET	        DT_REG_ADDR(SLOT0TMP_NODE)
+#define SLOT0TMP_SIZE           DT_REG_SIZE(SLOT0TMP_NODE)
 
 #define BL_SHARED_SRAM_NODE	DT_NODELABEL(bl_shared_sram)
 #define BL_SHARED_SRAM_SECT	LINKER_DT_NODE_REGION_NAME(BL_SHARED_SRAM_NODE)
@@ -62,11 +72,21 @@ struct flash_slot_ctx {
         uint32_t size;
 };
 
-const struct flash_slot_ctx slots[2] = {
+const struct flash_slot_ctx slots[4] = {
         {
                 .dev = SLOT0_DEVICE,
                 .off = SLOT0_OFFSET,
                 .size = SLOT0_SIZE,
+        },
+        {
+                .dev = SLOT0UPD_DEVICE,
+                .off = SLOT0UPD_OFFSET,
+                .size = SLOT0UPD_SIZE,
+        },
+        {
+                .dev = SLOT0TMP_DEVICE,
+                .off = SLOT0TMP_OFFSET,
+                .size = SLOT0TMP_SIZE,
         },
         {
                 .dev = SLOT1_DEVICE,
@@ -157,19 +177,8 @@ void cli_upload_block(const struct shell *sh, uint8_t *data, size_t len)
                 ldsize -= cplen;
                 data += cplen;
 
-                if (ldoff == IMG_BUF_SIZE) {
-                        shell_print(sh, "Checking image");
-                        struct sbk_image_state st;
-                        rc = sbk_image_get_state_hdr(img_buffer, ldoff, &st);
-                        if ((rc != 0) || 
-                            (!SBK_IMAGE_STATE_CAN_UPGR(st.state_flags))) {
-                                shell_print(sh, "bad image");
-                                ldok = false;
-                        }
-                }
-
                 if (((boff == IMG_BUF_SIZE) || (ldsize == 0U)) && (ldok)) {
-                        rc = sbk_image_write(&ldslot, wroff, img_buffer, boff);
+                        rc = sbk_slot_prog(&ldslot, wroff, img_buffer, boff);
                         if (rc != 0) {
                                 ldok = false;
                                 shell_print(sh, "Write failed");
@@ -214,7 +223,7 @@ int cli_command_upload(const struct shell *sh, int argc, char *argv[]) {
         slot = strtoul(argv[1], NULL, 0);
         ldsize = strtoul(argv[2], NULL, 0);
 
-        if (sbk_slot_get(&ldslot, slot) != 0) {
+        if ((sbk_slot_get(&ldslot, slot) != 0) || (slot == 0U)) {
                 shell_print(sh, "Bad slot specified");
                 return 0;
         }
@@ -233,6 +242,7 @@ int cli_command_upload(const struct shell *sh, int argc, char *argv[]) {
                 shell_print(sh, "Cannot upgrade running image");
                 return 0;
         }
+
 
         ldoff = 0U;
         ldok = true;
@@ -264,16 +274,19 @@ int cli_command_list(const struct shell *sh, int argc, char *argv[]) {
 
                 SBK_IMAGE_STATE_CLR_FLAGS(st.state_flags);
                 rc = sbk_image_get_state_upd(&slot, &st);                
+                (void)sbk_slot_close(&slot);
+                
                 if (rc != 0) {
-                        break;
+                        shell_print(sh, "Slot %d: no valid image", slot_no);
+                        slot_no++;
+                        continue;
                 }
-
-                shell_print(sh, "Slot %d contains version %d.%d-%d %s flags %x",
+                
+                shell_print(sh, "Slot %d: version %d.%d-%d %s flags %x",
                             slot_no, st.image_version.major, 
                             st.image_version.minor, st.image_version.revision, 
                             is_running(&slot) ? "(running)" : "",
                             st.state_flags);
-                (void)sbk_slot_close(&slot);
                 slot_no++;
         }
 
@@ -281,10 +294,51 @@ int cli_command_list(const struct shell *sh, int argc, char *argv[]) {
 
 }
 
+int cli_command_copy(const struct shell *sh, int argc, char *argv[]) {
+        uint32_t slot_no_src, slot_no_dst;
+        struct sbk_slot slot_src, slot_dst;
+
+        if (argc < 2) {
+                shell_print(sh, "Insufficient arguments");
+                return 0;
+        }
+
+        slot_no_src = strtoul(argv[1], NULL, 0);
+        slot_no_dst = strtoul(argv[2], NULL, 0);
+
+        if ((sbk_slot_get(&slot_src, slot_no_src) != 0) ||
+            (sbk_slot_get(&slot_dst, slot_no_dst) != 0) ||
+            (slot_no_src == 3) || (slot_no_dst == 3)) {
+                shell_print(sh, "Bad slot specified");
+                goto end;
+        }
+
+        if (sbk_slot_open(&slot_src) != 0) {
+                shell_print(sh, "Cannot open slot %d", slot_no_src);
+                goto end;
+        }
+
+        if (sbk_slot_open(&slot_dst) != 0) {
+                shell_print(sh, "Cannot open slot %d", slot_no_dst);
+                goto end_slot_src;
+        }
+
+        int rc = sbk_image_copy(&slot_dst, &slot_src, 0, slot_src.size);
+        shell_print(sh, "Copying slot %d to %d [%s]", slot_no_src, slot_no_dst,
+                    rc == 0 ? "Success" : "Failed");
+
+        sbk_slot_close(&slot_dst);
+end_slot_src:
+        sbk_slot_close(&slot_src);
+end:
+        return 0;
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(
         image,
         SHELL_CMD(upload, NULL, "Upload new firmware", cli_command_upload),
         SHELL_CMD(list, NULL, "List available images", cli_command_list),
+        SHELL_CMD(copy, NULL, "Copy image", cli_command_copy),
         SHELL_SUBCMD_SET_END
 );
 

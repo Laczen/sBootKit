@@ -34,6 +34,7 @@ from Crypto.Cipher import ChaCha20
 SBK_IMAGE_META_TAG = 0x8000
 SBK_IMAGE_AUTH_TAG = 0x7FFF
 SBK_IMAGE_FLAG_CONFIRMED = 0x0001
+SBK_IMAGE_FLAG_DOWNGRADE = 0x0002
 SBK_IMAGE_FLAG_ENCRYPTED = 0x0010
 SBK_IMAGE_FLAG_ZLIB = 0x0020
 SBK_IMAGE_FLAG_VCDIFF = 0x0040
@@ -241,13 +242,16 @@ class Image():
     def show(self, data):
         print('\\x' + '\\x'.join(format(x, '02x') for x in data))
 
-    def create(self, fslkey, updkey, confirm, encrypt):
+    def create(self, fslkey, updkey, confirm, downgrade, encrypt):
 
         if encrypt:
             self.flags |= SBK_IMAGE_FLAG_ENCRYPTED
         
         if confirm:
             self.flags |= SBK_IMAGE_FLAG_CONFIRMED
+
+        if downgrade:
+            self.flags |= SBK_IMAGE_FLAG_DOWNGRADE
 
         meta_offset = self.add_auth()
         self.add_meta(meta_offset)

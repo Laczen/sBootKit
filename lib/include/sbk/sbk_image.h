@@ -18,12 +18,20 @@ extern "C" {
 #define SBK_IMAGE_WBS   64
 #define SBK_IMAGE_AUTH_TAG              0x7FFF
 #define SBK_IMAGE_META_TAG              0x8000
-#define SBK_IMAGE_FLAG_CONFIRMED        0x0001
-#define SBK_IMAGE_FLAG_ENCRYPTED        0x0010
-#define SBK_IMAGE_FLAG_ZLIB             0x0020
-#define SBK_IMAGE_FLAG_VCDIFF           0x0040
+#define SBK_IMAGE_FLAG_CONFIRMED        0x0001 /* Confirmed image */
+#define SBK_IMAGE_FLAG_DOWNGRADE        0x0002 /* Downgrade allowed (revert) */
+#define SBK_IMAGE_FLAG_ENCRYPTED        0x0010 /* Encrypted image */
+#define SBK_IMAGE_FLAG_ZLIB             0x0020 /* ZLIB compressed image */
+#define SBK_IMAGE_FLAG_VCDIFF           0x0040 /* VCDIFF image */
 #define SBK_IMAGE_AUTH_CONTEXT  "SBK AUTHENTICATE"
 #define SBK_IMAGE_ENCR_CONTEXT  "SBK ENCRYPT"
+#define SBK_IMAGE_STATE_BDST            0x0001
+#define SBK_IMAGE_STATE_AUTH            0x0002
+#define SBK_IMAGE_STATE_IDEP            0x0004
+#define SBK_IMAGE_STATE_PDEP            0x0008
+#define SBK_IMAGE_STATE_CONF            0x0010
+#define SBK_IMAGE_STATE_DOWN            0x0020
+
 
 struct sbk_slot;
 
@@ -42,7 +50,7 @@ struct __attribute__((packed)) sbk_image_auth {
 struct __attribute__((packed)) sbk_image_meta {
         struct sbk_image_rec_hdr rhdr;  /* record tag + length */
         struct sbk_version image_version;
-        uint32_t image_start_address;
+        unsigned long image_start_address;
         uint32_t image_flags;           /* flags descr. image properties */
         uint32_t image_size;            /* image size without header */
         uint16_t image_offset;          /* image offset from start of header */
@@ -67,6 +75,44 @@ struct __attribute__((packed)) sbk_product_dep_info {
         uint16_t next_tag;
         uint16_t pad16;
 };
+
+struct sbk_image_state {
+        uint32_t state_flags;
+        unsigned long image_start_address;
+        size_t length;
+        struct sbk_version image_version;
+};
+
+#define SBK_IMAGE_STATE_BDST_SET(flags) (flags |= SBK_IMAGE_STATE_BDST)
+#define SBK_IMAGE_STATE_AUTH_SET(flags) (flags |= SBK_IMAGE_STATE_AUTH)
+#define SBK_IMAGE_STATE_IDEP_SET(flags) (flags |= SBK_IMAGE_STATE_IDEP)
+#define SBK_IMAGE_STATE_PDEP_SET(flags) (flags |= SBK_IMAGE_STATE_PDEP)
+#define SBK_IMAGE_STATE_CONF_SET(flags) (flags |= SBK_IMAGE_STATE_CONF)
+#define SBK_IMAGE_STATE_DOWN_SET(flags) (flags |= SBK_IMAGE_STATE_DOWN)
+#define SBK_IMAGE_STATE_COND_IS_SET(flags, CONDITION)                           \
+        (((flags) & (CONDITION)) == (CONDITION))
+#define SBK_IMAGE_STATE_BDST_IS_SET(flags)                                      \
+        SBK_IMAGE_STATE_COND_IS_SET(flags, SBK_IMAGE_STATE_BDST)
+#define SBK_IMAGE_STATE_AUTH_IS_SET(flags)                                      \
+        SBK_IMAGE_STATE_COND_IS_SET(flags, SBK_IMAGE_STATE_AUTH)
+#define SBK_IMAGE_STATE_IDEP_IS_SET(flags)                                      \
+        SBK_IMAGE_STATE_COND_IS_SET(flags, SBK_IMAGE_STATE_IDEP)
+#define SBK_IMAGE_STATE_PDEP_IS_SET(flags)                                      \
+        SBK_IMAGE_STATE_COND_IS_SET(flags, SBK_IMAGE_STATE_PDEP)
+#define SBK_IMAGE_STATE_CONF_IS_SET(flags)                                      \
+        SBK_IMAGE_STATE_COND_IS_SET(flags, SBK_IMAGE_STATE_CONF)
+#define SBK_IMAGE_STATE_DOWN_IS_SET(flags)                                      \
+        SBK_IMAGE_STATE_DOWN_IS_SET(flags, SBK_IMAGE_STATE_DOWN)
+
+#define SBK_IMAGE_STATE_CLR_FLAGS(flags) flags = 0U
+#define SBK_IMAGE_STATE_CAN_UPGR(flags)                                         \
+        SBK_IMAGE_STATE_COND_IS_SET(flags,                                      \
+                (SBK_IMAGE_STATE_PDEP | SBK_IMAGE_STATE_IDEP |                  \
+                 SBK_IMAGE_STATE_AUTH))
+#define SBK_IMAGE_STATE_CAN_BOOT(flags)                                         \
+        SBK_IMAGE_STATE_COND_IS_SET(flags,                                      \
+                (SBK_IMAGE_STATE_PDEP | SBK_IMAGE_STATE_IDEP |                  \
+                 SBK_IMAGE_STATE_AUTH | SBK_IMAGE_STATE_BDST))
 
 /**
  * @brief sbk_image_read
@@ -99,22 +145,6 @@ int sbk_image_write(const struct sbk_slot *slot, unsigned long offset,
                     const void *data, size_t len);
 
 /**
- * @brief sbk_image_bootable
- *
- * Check if an image in a slot is bootable, this uses the key that is defined by
- * the first stage loader (fsl). So this should only be used from a context that
- * knows the fsl key (e.g when running as fsl).
- *
- * @param slot: pointer to slot where the image resides
- * @param address: is updated with the jump address if the image is bootable
- * @param bcnt: bootcount is reset to zero when image is confirmed
- * @retval -ERRNO errno code if error
- * @retval 0 if succesfull
- */
-int sbk_image_bootable(const struct sbk_slot *slot, unsigned long *address,
-                       uint8_t *bcnt);
-
-/**
  * @brief sbk_image_get_version
  *
  * Get the version of an image in a slot
@@ -128,27 +158,77 @@ int sbk_image_get_version(const struct sbk_slot *slot,
                           struct sbk_version *version);
 
 /**
- * @brief sbk_image_valid
+ * @brief sbk_image_get_length
  *
- * Verifies the validity of an image in a slot
+ * Get the length (header + image) of an image in a slot
  *
  * @param slot: pointer to slot where the image resides
+ * @param length: returns the length
  * @retval -ERRNO errno code if error
  * @retval 0 if succesfull
  */
-int sbk_image_valid(const struct sbk_slot *slot);
+int sbk_image_get_length(const struct sbk_slot *slot, size_t *length);
 
-int sbk_image_hdr_valid(void *data, size_t len);
-// /**
-//  * @brief sbk_image_check_hdr
-//  *
-//  * Verifies the validity of an image in a slot using only the header
-//  *
-//  * @param slot: pointer to slot where the image resides
-//  * @retval -ERRNO errno code if error
-//  * @retval 0 if succesfull
-//  */
-// int sbk_image_check_hdr(const struct sbk_slot *slot);
+/**
+ * @brief sbk_image_get_state_fsl
+ *
+ * Get the image state from a first stage loader (fsl) perspective. This uses
+ * the fsl key and will only provide valid authentication results when running
+ * as first stage loader.
+ *
+ * @param slot: pointer to slot where the image resides
+ * @param sbk_image_state: image state containing image info and flags
+ * @retval -ERRNO errno code if error
+ * @retval 0 if succesfull
+ */
+int sbk_image_get_state_fsl(const struct sbk_slot *slot, 
+                            struct sbk_image_state *st);
+
+/**
+ * @brief sbk_image_get_state_upd
+ *
+ * Get the image state from a updater (upd) perspective. This uses the upd key
+ * and will only provide valid authentication results when running as updater
+ *
+ * @param slot: pointer to slot where the image resides
+ * @param sbk_image_state: image state containing image info and flags
+ * @retval -ERRNO errno code if error
+ * @retval 0 if succesfull
+ */
+int sbk_image_get_state_upd(const struct sbk_slot *slot, 
+                            struct sbk_image_state *st);
+
+/**
+ * @brief sbk_image_get_state_hdr
+ *
+ * Get the image state from a updater (upd) perspective using only the image
+ * header. This uses the upd key and will only provide valid authentication
+ * results when running as updater
+ *
+ * @param slot: pointer to slot where the image resides
+ * @param sbk_image_state: image state containing image info and flags
+ * @retval -ERRNO errno code if error
+ * @retval 0 if succesfull
+ */
+int sbk_image_get_state_hdr(void *data, size_t len, struct sbk_image_state *st);
+
+int sbk_image_copy(const struct sbk_slot *dest, const struct sbk_slot *src,
+		   unsigned long off, size_t len);
+
+/**
+ * @brief sbk_image_swap
+ * 
+ * Swap images from src to dest using temporary slot
+ * 
+ * @param dest: destination slot
+ * @param src: source slot 
+ * @param tmp: temporary slot 
+ * @param erase_block_size 
+ * @retval -ERRNO errno code if errror
+ * @retval 0 if succesfull 
+ */
+int sbk_image_swap(const struct sbk_slot *dest, const struct sbk_slot *src,
+		   const struct sbk_slot *tmp, size_t erase_block_size);
 
 #ifdef __cplusplus
 }

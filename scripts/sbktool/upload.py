@@ -32,7 +32,6 @@ def upload(device, baudrate, slot, file):
 
         ih = IntelHex(file)
         payload = ih.tobinarray()
-        print(len(payload))
         port = []
         try:
                 s = serial.Serial(device, baudrate)
@@ -50,9 +49,8 @@ def upload(device, baudrate, slot, file):
         msg = "\n"
         s.write(msg.encode())
         a = s.read(32767)
-        print(a)
         msg = "image upload " + str(slot) + " " + str(len(payload)) + "\n"
-        print(msg)
+        print(a[:-2].decode(), msg)
         s.write(msg.encode())
         a = s.read_until(b'\r\n')
         #
@@ -60,7 +58,7 @@ def upload(device, baudrate, slot, file):
         length = len(payload)
         while length > 0:
                 a = s.read_until(b'OK\r\n')
-                print("resp: " + a.decode())
+                print("rsp: " + a[:-1].decode())
                 wrlen = min(length, 256)
                 data = payload[pos: pos + wrlen]
                 b = s.write(data)

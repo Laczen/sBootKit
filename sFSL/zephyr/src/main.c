@@ -142,11 +142,10 @@ void main(void)
                 shared_data.bcnt = 0U;
         }
 
-        unsigned long address;
-        int rc;
-
         for (uint32_t i = 0; i < ARRAY_SIZE(slots); i++) {
                 struct sbk_slot slot;
+                struct sbk_image_state st;
+                int rc;
                 
                 if (shared_data.bslot >= ARRAY_SIZE(slots)) {
                         shared_data.bslot = 0U;
@@ -167,19 +166,25 @@ void main(void)
                 }
 
                 shared_data.bcnt++;
-                rc = sbk_image_bootable(&slot, &address, &shared_data.bcnt);
-                if (rc != 0) {
-                        SBK_LOG_DBG("Failed booting image in slot %d",
-                                    shared_data.bslot);
 
+                SBK_IMAGE_STATE_CLR_FLAGS(st.state_flags);
+                rc = sbk_image_get_state_fsl(&slot, &st);
+                SBK_LOG_DBG("Image state: %x address %lx", st.state_flags,
+                            st.image_start_address);
+                if ((rc != 0) || 
+                    (!SBK_IMAGE_STATE_CAN_BOOT(st.state_flags))) {
                         shared_data.bslot++;
                         shared_data.bcnt = 0U;
                         continue;
                 }
 
+                if (SBK_IMAGE_STATE_CONF_IS_SET(st.state_flags)) {
+                        shared_data.bcnt = 0U;
+                }
+
                 (void)sbk_slot_close(&slot);
-                SBK_LOG_DBG("Jumping to address: %lx", address);
-                jump_image(address);
+                SBK_LOG_DBG("Jumping to address: %lx", st.image_start_address);
+                jump_image(st.image_start_address);
         }
 
         SBK_LOG_DBG("No bootable image found");

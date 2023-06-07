@@ -169,13 +169,15 @@ class BasedIntParamType(click.ParamType):
 @click.option('-uk','--updkey', metavar = 'filename', required = True,
               help = 'Updater authentication/encryption using the provided key')
 @click.option('-c','--confirm', is_flag = True, help = 'create confirmed image')
+@click.option('-d','--downgrade', is_flag = True,
+              help = 'allow image downgrade (reverting image)')
 @click.option('-e','--encrypt', is_flag = True, help = 'create encrypted image')
 @click.option('-tst', '--test-image', is_flag = True,
               help = 'generate test image as c file')
 @click.command(help='''Create a image for use with sBootKit\n
                INFILE and OUTFILE are of type hex''')
 def create(align, hdrsize, version, product, dependency, fslkey, updkey,
-           confirm, encrypt, test_image, infile, outfile, endian):
+           confirm, downgrade, encrypt, test_image, infile, outfile, endian):
     fslkey = load_key(fslkey)
     updkey = load_key(updkey)
     if (fslkey is not None) and (updkey is not None):
@@ -183,7 +185,7 @@ def create(align, hdrsize, version, product, dependency, fslkey, updkey,
                           product_dep = product, image_dep = dependency,
                           endian = endian, align = align, type = type)
         img.load(infile)
-        img.create(fslkey, updkey, confirm, encrypt)
+        img.create(fslkey, updkey, confirm, downgrade, encrypt)
         if outfile is not None:
             img.save(outfile)
 

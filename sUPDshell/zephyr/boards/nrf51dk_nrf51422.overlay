@@ -26,14 +26,24 @@
 			reg = <0x00000000 0x00002000>;
 		};
 
-		storage_partition: partition@2000 {
+				storage_partition: partition@2000 {
 			label = "storage";
-			reg = <0x00002000 0x00006000>;
+			reg = <0x00002000 0x00005000>;
 		};
 
-		slot0_partition: partition@8000 {
+		slot0_partition: partition@7000 {
 			label = "image";
-			reg = <0x00008000 0x00028000>;
+			reg = <0x00007000 0x00014000>;
+		};
+
+		slot0tmp_partition: partition@8000 {
+			label = "tmp";
+			reg = <0x00008000 0x00014000>;
+		};
+
+		slot0upd_partition: partition@1C000 {
+			label = "upd";
+			reg = <0x0001C000 0x00014000>;
 		};
 
 		slot1_partition: partition@30000 {

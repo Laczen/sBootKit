@@ -88,7 +88,6 @@ struct sbk_image_state {
 #define SBK_IMAGE_STATE_IDEP_SET(flags) (flags |= SBK_IMAGE_STATE_IDEP)
 #define SBK_IMAGE_STATE_PDEP_SET(flags) (flags |= SBK_IMAGE_STATE_PDEP)
 #define SBK_IMAGE_STATE_CONF_SET(flags) (flags |= SBK_IMAGE_STATE_CONF)
-#define SBK_IMAGE_STATE_DOWN_SET(flags) (flags |= SBK_IMAGE_STATE_DOWN)
 #define SBK_IMAGE_STATE_COND_IS_SET(flags, CONDITION)                           \
         (((flags) & (CONDITION)) == (CONDITION))
 #define SBK_IMAGE_STATE_BDST_IS_SET(flags)                                      \
@@ -101,8 +100,6 @@ struct sbk_image_state {
         SBK_IMAGE_STATE_COND_IS_SET(flags, SBK_IMAGE_STATE_PDEP)
 #define SBK_IMAGE_STATE_CONF_IS_SET(flags)                                      \
         SBK_IMAGE_STATE_COND_IS_SET(flags, SBK_IMAGE_STATE_CONF)
-#define SBK_IMAGE_STATE_DOWN_IS_SET(flags)                                      \
-        SBK_IMAGE_STATE_DOWN_IS_SET(flags, SBK_IMAGE_STATE_DOWN)
 
 #define SBK_IMAGE_STATE_CLR_FLAGS(flags) flags = 0U
 #define SBK_IMAGE_STATE_CAN_UPGR(flags)                                         \
@@ -212,8 +209,7 @@ int sbk_image_get_state_upd(const struct sbk_slot *slot,
  */
 int sbk_image_get_state_hdr(void *data, size_t len, struct sbk_image_state *st);
 
-int sbk_image_copy(const struct sbk_slot *dest, const struct sbk_slot *src,
-		   unsigned long off, size_t len);
+int sbk_image_copy(const struct sbk_slot *dest, const struct sbk_slot *src);
 
 /**
  * @brief sbk_image_swap

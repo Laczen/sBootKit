@@ -6,6 +6,7 @@
 
 #include "sbk/sbk_slot.h"
 #include "sbk/sbk_util.h"
+#include "sbk/sbk_log.h"
 
 int sbk_slot_read(const struct sbk_slot *slot, unsigned long off, void *data,
                   size_t len)

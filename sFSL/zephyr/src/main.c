@@ -11,6 +11,9 @@
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/linker/devicetree_regions.h>
+#include <zephyr/logging/log.h>
+
+LOG_MODULE_REGISTER(sfsl, LOG_LEVEL_DBG);
 
 #include "sbk/sbk_slot.h"
 #include "sbk/sbk_util.h"
@@ -119,13 +122,14 @@ void main(void)
 {
         uint32_t product_hash;
 
-        SBK_LOG_DBG("Welcome...");
+        LOG_DBG("Welcome...");
         product_hash = sbk_product_djb2_hash(CONFIG_PRODUCT_NAME,
                                              sizeof(CONFIG_PRODUCT_NAME));
 
         if ((shared_data.product_hash != product_hash) ||
             (shared_data.bcnt > BOOT_RETRIES) ||
             (shared_data.bslot >= ARRAY_SIZE(slots))) {
+                LOG_DBG("Recreating shared data...");
                 shared_data.product_hash = product_hash;
                 shared_data.product_ver.major = CONFIG_PRODUCT_VER_MAJ;
                 shared_data.product_ver.minor = CONFIG_PRODUCT_VER_MIN;
@@ -151,7 +155,7 @@ void main(void)
                         shared_data.bslot = 0U;
                 }
 
-                SBK_LOG_DBG("Testing slot %d", shared_data.bslot);
+                LOG_DBG("Testing slot %d", shared_data.bslot);
 
                 rc = sbk_slot_get(&slot, shared_data.bslot);
                 if (rc != 0) {
@@ -169,8 +173,8 @@ void main(void)
 
                 SBK_IMAGE_STATE_CLR_FLAGS(st.state_flags);
                 rc = sbk_image_get_state_fsl(&slot, &st);
-                SBK_LOG_DBG("Image state: %x address %lx", st.state_flags,
-                            st.image_start_address);
+                LOG_DBG("Image state: %x address %lx", st.state_flags,
+                        st.image_start_address);
                 if ((rc != 0) || 
                     (!SBK_IMAGE_STATE_CAN_BOOT(st.state_flags))) {
                         shared_data.bslot++;
@@ -183,11 +187,12 @@ void main(void)
                 }
 
                 (void)sbk_slot_close(&slot);
-                SBK_LOG_DBG("Jumping to address: %lx", st.image_start_address);
+                LOG_DBG("Jumping to address: %lx bcnt: %d", 
+                        st.image_start_address, shared_data.bcnt);
                 jump_image(st.image_start_address);
         }
 
-        SBK_LOG_DBG("No bootable image found");
+        LOG_DBG("No bootable image found");
 
         while(1);
 }

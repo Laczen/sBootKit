@@ -18,7 +18,7 @@
 
 		sfsl_partition: partition@0 {
 			label = "sFSL";
-			reg = <0x00000000 0x00004000>;
+			reg = <0x00000000 0x00008000>;
 		};
 
 		storage_partition: partition@4000 {

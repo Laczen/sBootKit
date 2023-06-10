@@ -10,10 +10,14 @@
 #include <stdlib.h>
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/flash.h>
+#include <zephyr/sys/reboot.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/linker/devicetree_regions.h>
 #include <zephyr/shell/shell.h>
+#include <zephyr/logging/log.h>
+
+LOG_MODULE_REGISTER(sswpshell, LOG_LEVEL_DBG); 
 
 #include "sbk/sbk_image.h"
 #include "sbk/sbk_slot.h"
@@ -21,6 +25,7 @@
 #include "sbk/sbk_product.h"
 
 #define FLASH_OFFSET CONFIG_FLASH_BASE_ADDRESS
+#define ERASE_BLOCK_SIZE 0x1000
 
 #define SLOT0_NODE		DT_NODELABEL(slot0_partition)
 #define SLOT0_MTD               DT_MTD_FROM_FIXED_PARTITION(SLOT0_NODE)
@@ -115,8 +120,9 @@ static int prog(const void *ctx, unsigned long off, const void *data, size_t len
         const struct flash_slot_ctx *sctx = (const struct flash_slot_ctx *)ctx;
         int rc;
 
-        if (((sctx->off + off) % 0x20000) == 0U) {
-                rc = flash_erase(sctx->dev, sctx->off + off, 131072);
+        if (((sctx->off + off) % ERASE_BLOCK_SIZE) == 0U) {
+                LOG_DBG("Erasing flash at %lx", sctx->off + off);
+                rc = flash_erase(sctx->dev, sctx->off + off, ERASE_BLOCK_SIZE);
                 if (rc != 0) {
                         goto end;
                 }
@@ -151,6 +157,7 @@ int (*sbk_slot_get)(struct sbk_slot *slot, unsigned int slot_no) = slot_get;
  */
 int cli_command_reboot(const struct shell *sh, int argc, char *argv[]) {
         shell_print(sh, "Rebooting");
+        sys_reboot(0);
         return 0;
 }
 
@@ -164,6 +171,11 @@ static struct sbk_slot ldslot;
 void cli_upload_block(const struct shell *sh, uint8_t *data, size_t len)
 {
         int rc;
+
+        if ((ldoff == 0) && (*data != 0xff)) {
+                data++;
+                len--; 
+        }
 
         while (len != 0) {
                 unsigned long boff = ldoff & (IMG_BUF_SIZE - 1);
@@ -186,16 +198,14 @@ void cli_upload_block(const struct shell *sh, uint8_t *data, size_t len)
                 }
         }
 
-        if (ldsize == 0U) {
-                sbk_slot_close(&ldslot);
-                shell_set_bypass(sh, NULL);
-                return;
-        }
-
-        if ((ldoff % 256) == 0) {
+        if (((ldoff % 32) == 0U) || (ldsize == 0U)) {
                 shell_print(sh, "off: %ld, rs: %d OK", ldoff, ldsize);
         }
 
+        if (ldsize == 0U) {
+                sbk_slot_close(&ldslot);
+                shell_set_bypass(sh, NULL);
+        }
 }
 
 void main(void);
@@ -243,14 +253,10 @@ int cli_command_upload(const struct shell *sh, int argc, char *argv[]) {
                 return 0;
         }
 
-
         ldoff = 0U;
         ldok = true;
-
-        shell_print(sh, "Writing %d bytes to slot %d ...", ldsize, slot);
-        shell_print(sh, "OK");
-        shell_set_bypass(sh, NULL);
         shell_set_bypass(sh, cli_upload_block);
+        shell_print(sh, "OK");
         return 0;
 }
 
@@ -323,10 +329,58 @@ int cli_command_copy(const struct shell *sh, int argc, char *argv[]) {
                 goto end_slot_src;
         }
 
-        int rc = sbk_image_copy(&slot_dst, &slot_src, 0, slot_src.size);
+        int rc = sbk_image_copy(&slot_dst, &slot_src);
         shell_print(sh, "Copying slot %d to %d [%s]", slot_no_src, slot_no_dst,
                     rc == 0 ? "Success" : "Failed");
 
+        sbk_slot_close(&slot_dst);
+end_slot_src:
+        sbk_slot_close(&slot_src);
+end:
+        return 0;
+}
+
+int cli_command_swap(const struct shell *sh, int argc, char *argv[]) {
+        uint32_t slot_no_src, slot_no_dst, slot_no_tmp;
+        struct sbk_slot slot_src, slot_dst, slot_tmp;
+
+        if (argc < 3) {
+                shell_print(sh, "Insufficient arguments");
+                return 0;
+        }
+
+        slot_no_dst = strtoul(argv[1], NULL, 0);
+        slot_no_src = strtoul(argv[2], NULL, 0);
+        slot_no_tmp = strtoul(argv[3], NULL, 0);
+
+        if ((sbk_slot_get(&slot_src, slot_no_src) != 0) ||
+            (sbk_slot_get(&slot_dst, slot_no_dst) != 0) ||
+            (sbk_slot_get(&slot_tmp, slot_no_tmp) != 0) ||
+            (slot_no_src == 3) || (slot_no_dst == 3) || (slot_no_tmp != 2)) {
+                shell_print(sh, "Bad slot specified");
+                goto end;
+        }
+
+        if (sbk_slot_open(&slot_src) != 0) {
+                shell_print(sh, "Cannot open slot %d", slot_no_src);
+                goto end;
+        }
+
+        if (sbk_slot_open(&slot_dst) != 0) {
+                shell_print(sh, "Cannot open slot %d", slot_no_dst);
+                goto end_slot_src;
+        }
+
+        if (sbk_slot_open(&slot_tmp) != 0) {
+                shell_print(sh, "Cannot open slot %d", slot_no_tmp);
+                goto end_slot_tmp;
+        }
+
+        int rc = sbk_image_swap(&slot_dst, &slot_src, &slot_tmp, 0x20000);
+        shell_print(sh, "Swapping slot %d to %d [%s]", slot_no_src, slot_no_dst,
+                    rc == 0 ? "Success" : "Failed");
+
+end_slot_tmp:
         sbk_slot_close(&slot_dst);
 end_slot_src:
         sbk_slot_close(&slot_src);
@@ -339,6 +393,8 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
         SHELL_CMD(upload, NULL, "Upload new firmware", cli_command_upload),
         SHELL_CMD(list, NULL, "List available images", cli_command_list),
         SHELL_CMD(copy, NULL, "Copy image", cli_command_copy),
+        SHELL_CMD(swap, NULL, "Swap image", cli_command_swap),
+        SHELL_CMD(reboot, NULL, "Reboot", cli_command_reboot),
         SHELL_SUBCMD_SET_END
 );
 
@@ -346,11 +402,11 @@ SHELL_CMD_REGISTER(image, &image, "Working with images", NULL);
 
 void main(void)
 {          
-        SBK_LOG_INF("Welcome to %x version %d.%d-%d", shared_data.product_hash,
+        LOG_INF("Welcome to %x version %d.%d-%d", shared_data.product_hash,
                 shared_data.product_ver.major, 
                 shared_data.product_ver.minor,
                 shared_data.product_ver.revision);
-        SBK_LOG_INF("Running from slot %d", shared_data.bslot);
-        SBK_LOG_INF("Boot retries %d", shared_data.bcnt);
-        SBK_LOG_INF("Main located at: %p", main);
+        LOG_INF("Running from slot %d", shared_data.bslot);
+        LOG_INF("Boot retries %d", shared_data.bcnt);
+        LOG_INF("Main located at: %p", main);
 }

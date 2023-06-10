@@ -15,6 +15,10 @@
 #include <zephyr/linker/devicetree_regions.h>
 #include <zephyr/shell/shell.h>
 
+#include <zephyr/logging/log.h>
+
+LOG_MODULE_REGISTER(supdshell);
+
 #include "sbk/sbk_image.h"
 #include "sbk/sbk_slot.h"
 #include "sbk/sbk_util.h"
@@ -292,11 +296,11 @@ SHELL_CMD_REGISTER(image, &image, "Working with images", NULL);
 
 void main(void)
 {          
-        SBK_LOG_INF("Welcome to %x version %d.%d-%d", shared_data.product_hash,
+        LOG_INF("Welcome to %x version %d.%d-%d", shared_data.product_hash,
                 shared_data.product_ver.major, 
                 shared_data.product_ver.minor,
                 shared_data.product_ver.revision);
-        SBK_LOG_INF("Running from slot %d", shared_data.bslot);
-        SBK_LOG_INF("Boot retries %d", shared_data.bcnt);
-        SBK_LOG_INF("Main located at: %p", main);
+        LOG_INF("Running from slot %d", shared_data.bslot);
+        LOG_INF("Boot retries %d", shared_data.bcnt);
+        LOG_INF("Main located at: %p", main);
 }

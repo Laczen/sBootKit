@@ -44,27 +44,23 @@ def upload(device, baudrate, slot, file):
                 msg = device + " is not available"
                 raise ValueError(msg)
 
-        s = serial.Serial(port[0], baudrate)
-        s.timeout = 2
-        msg = "\n"
-        s.write(msg.encode())
-        a = s.read(32767)
+        s = serial.Serial(port[0], baudrate, timeout = 2)
+                
         msg = "image upload " + str(slot) + " " + str(len(payload)) + "\n"
-        print(a[:-2].decode(), msg)
         s.write(msg.encode())
-        a = s.read_until(b'\r\n')
-        #
+        time.sleep(0.01)
         pos = 0
         length = len(payload)
-        while length > 0:
+        while True:
+                time.sleep(0.01)
                 a = s.read_until(b'OK\r\n')
-                print("rsp: " + a[:-1].decode())
-                wrlen = min(length, 256)
+                print("rsp: " + a[:-1].decode(), end = '\r')
+                if length == 0:
+                        break
+                wrlen = min(length, 32)
                 data = payload[pos: pos + wrlen]
                 b = s.write(data)
                 length -= wrlen
                 pos += wrlen
 
-        a = s.read_until(b'\r\n')
-        print(a.decode())
         s.close()

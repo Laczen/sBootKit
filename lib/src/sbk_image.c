@@ -7,6 +7,7 @@
 #include "sbk/sbk_crypto.h"
 #include "sbk/sbk_slot.h"
 #include "sbk/sbk_image.h"
+#include "sbk/sbk_log.h"
 #include <string.h>
 
 #define SBK_IMAGE_CONFIRMED(flags)			                        \
@@ -309,10 +310,6 @@ static int sbk_image_get_state(const struct sbk_slot *slot,
 
 	if (SBK_IMAGE_CONFIRMED(meta.image_flags)) {
 		SBK_IMAGE_STATE_CONF_SET(st->state_flags);
-	}
-
-	if (SBK_IMAGE_DOWNGRADE(meta.image_flags)) {
-		SBK_IMAGE_STATE_DOWN_SET(st->state_flags);
 	}
 
 	if ((!SBK_IMAGE_STATE_PDEP_IS_SET(st->state_flags)) && 
@@ -637,8 +634,9 @@ int sbk_image_get_state_hdr(void *data, size_t len, struct sbk_image_state *st)
 	return sbk_image_get_state(&rdslot, st, SBK_IMAGE_CHECK_MODE_HDR);
 }
 
-int sbk_image_copy(const struct sbk_slot *dest, const struct sbk_slot *src,
-		   unsigned long off, size_t len)
+static int sbk_image_copy_part(const struct sbk_slot *dest, 
+		               const struct sbk_slot *src, unsigned long off,
+			       size_t len)
 {
 	uint8_t buf[256];
 	size_t length;
@@ -652,8 +650,6 @@ int sbk_image_copy(const struct sbk_slot *dest, const struct sbk_slot *src,
 	if ((off + len) > length) {
 		len = length - SBK_MIN(length, off);
 	}
-
-	SBK_LOG_DBG("Starting image copy len: %d", len);
 
 	while (len != 0) {
 		size_t rdlen = SBK_MIN(len, sizeof(buf));
@@ -674,6 +670,11 @@ int sbk_image_copy(const struct sbk_slot *dest, const struct sbk_slot *src,
 
 end:
 	return rc;
+}
+
+int sbk_image_copy(const struct sbk_slot *dest, const struct sbk_slot *src)
+{
+	return sbk_image_copy_part(dest, src, 0, src->size);
 }
 
 struct split_slot_ctx {
@@ -734,9 +735,112 @@ int sbk_image_swap(const struct sbk_slot *dest, const struct sbk_slot *src,
 		.address = split_slot_address,
 		.size = dest->size
 	};
-	struct sbk_image_state state;
+	struct sbk_image_state st;
+	unsigned long drp_off, swpd_off, swps_off;
+	size_t cp_len;
 	int rc;
 
-	rc = sbk_image_get_state_upd(&rdslot, &state);
+	drp_off = dest->size;
+	while (drp_off != 0U) {
+		sctx.aoff = drp_off;
+		SBK_IMAGE_STATE_CLR_FLAGS(st.state_flags);
+		rc = sbk_image_get_state_upd(&rdslot, &st);
+		if ((rc == 0) && SBK_IMAGE_STATE_CAN_UPGR(st.state_flags)) {
+			break;
+		}
+		drp_off -= erase_block_size;
+	}
+
+	if ((drp_off > 0U) && (drp_off < dest->size)) {
+		cp_len = dest->size - drp_off;
+		goto drop_tmp;	
+	}
+
+	swps_off = 0U;
+	sctx.slot = src;
+	sctx.aslot = tmp;
+	while (true) {
+		sctx.aoff = swps_off;
+		SBK_IMAGE_STATE_CLR_FLAGS(st.state_flags);
+		rc = sbk_image_get_state_upd(&rdslot, &st);
+		if ((rc == 0) && SBK_IMAGE_STATE_CAN_UPGR(st.state_flags)) {
+			break;
+		}
+
+		if (swps_off == dest->size) {
+			break;
+		}
+
+		swps_off += erase_block_size;
+	}
+
+	SBK_LOG_DBG("SWPS: %lx flags %x", swps_off, st.state_flags);
+	if (!SBK_IMAGE_STATE_CAN_UPGR(st.state_flags)) {
+		rc = -SBK_EC_EFAULT;
+		goto end;
+	}
+	
+	swpd_off = swps_off;
+	sctx.slot = dest;
+	sctx.aslot = src;
+	while (true) {
+		sctx.aoff = swpd_off;
+		SBK_IMAGE_STATE_CLR_FLAGS(st.state_flags);
+		rc = sbk_image_get_state_upd(&rdslot, &st);
+		if ((rc == 0) && SBK_IMAGE_STATE_CAN_UPGR(st.state_flags)) {
+			break;
+		}
+
+		if (swpd_off == dest->size) {
+			break;
+		}
+
+		swpd_off += erase_block_size;
+	}
+
+	SBK_LOG_DBG("SWPD: %lx flags %x", swpd_off, st.state_flags);
+
+	if (swps_off == dest->size) {
+
+	}
+
+	while (swpd_off != 0) {
+		cp_len = erase_block_size;
+		swps_off -= erase_block_size;
+		swpd_off -= erase_block_size;
+		if (swpd_off > swps_off) {
+			rc = sbk_image_copy_part(src, dest, swpd_off, cp_len);
+			if (rc != 0) {
+				goto end;
+			}
+			swpd_off -= erase_block_size;
+		}
+		
+		rc = sbk_image_copy_part(tmp, src, swps_off, cp_len);
+		if (rc != 0) {
+			goto end;
+		}
+
+		rc = sbk_image_copy_part(src, dest, swpd_off, cp_len);
+		if (rc != 0) {
+			goto end;
+		}
+	
+	}
+
+	cp_len = dest->size;
+	drp_off = 0U;
+drop_tmp:
+	rc = sbk_image_copy_part(dest, tmp, drp_off, cp_len);
+	if (rc != 0) {
+		goto end;
+	}
+
+	SBK_IMAGE_STATE_CLR_FLAGS(st.state_flags);
+	rc = sbk_image_get_state_upd(tmp, &st);
+	if ((rc == 0) && SBK_IMAGE_STATE_CAN_UPGR(st.state_flags)) {
+		rc = sbk_slot_prog(tmp, 0U, NULL, 0U);
+	}
+end:
 	return rc;
 }

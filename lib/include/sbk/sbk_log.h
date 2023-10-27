@@ -9,11 +9,13 @@
 #ifndef SBK_LOG_H_
 #define SBK_LOG_H_
 
-#include <stdint.h>
+#include <stdio.h>
+#include "sbk/sbk_shell.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
 
 #ifdef CONFIG_SBK_UTIL_INCLUDE
 #define SBK_STRINGIZE(x) SBK_STRINGIZE2(x)

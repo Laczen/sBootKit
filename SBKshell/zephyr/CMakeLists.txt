@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.13.1)
 # http://docs.zephyrproject.org/application/application.html
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
-project(sSWPshell)
+project(SBKshell)
 
 zephyr_include_directories(
     ${CMAKE_CURRENT_LIST_DIR}/include

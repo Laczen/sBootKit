@@ -8,14 +8,13 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
 project(sFSL)
 
+# Path to repository root.
+get_filename_component(UPDIR ${CMAKE_CURRENT_LIST_DIR} DIRECTORY)
+
 zephyr_include_directories(
-    ${CMAKE_CURRENT_LIST_DIR}/include
+    ${UPDIR}/include
 )
 
-zephyr_library_sources_ifdef(CONFIG_ARM
-    ./src/arm_jump.c
-)
-
-FILE(GLOB app_sources src/main.c)
+FILE(GLOB app_sources ${UPDIR}/src/main.c)
 
 target_sources(app PRIVATE ${app_sources})

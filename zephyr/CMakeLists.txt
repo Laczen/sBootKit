@@ -30,6 +30,8 @@ zephyr_library_sources(
     ${SBOOTKIT_DIR}/src/sbk_crypto.c
     ${SBOOTKIT_DIR}/src/sbk_image.c
     ${SBOOTKIT_DIR}/src/sbk_slot.c
+    ${SBOOTKIT_DIR}/src/sbk_util.c
+    ${SBOOTKIT_DIR}/src/sbk_shell.c
 )
 
 zephyr_include_directories_ifdef(CONFIG_SBK_MINCRYPT
@@ -46,4 +48,11 @@ zephyr_library_sources(
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_os.c
 )
 
+zephyr_library_sources_ifdef(CONFIG_ARM
+    ${CMAKE_CURRENT_LIST_DIR}/zephyr_os_arm.c
+)
+
+zephyr_library_sources_ifdef(CONFIG_TARGET_QEMU
+    ${CMAKE_CURRENT_LIST_DIR}/zephyr_os_qemu.c
+)
 endif()

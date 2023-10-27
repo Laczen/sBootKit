@@ -1,18 +1,9 @@
-/*
- * Copyright (c) 2022 Laczen
- *
- * SPDX-License-Identifier: Apache-2.0
- */
-
 #include <soc.h>
 #include <zephyr/irq.h>
+#include <cmsis_core.h>
 #include <zephyr/drivers/timer/system_timer.h>
 
-#if defined(CONFIG_CPU_AARCH32_CORTEX_A) || defined(CONFIG_CPU_AARCH32_CORTEX_R)
-#include <zephyr/arch/arm/aarch32/cortex_a_r/cmsis.h>
-#elif defined(CONFIG_CPU_CORTEX_M)
-#include <zephyr/arch/arm/aarch32/cortex_m/cmsis.h>
-#endif
+#include "sbk/sbk_boot.h"
 
 #if defined(CONFIG_SW_VECTOR_RELAY)
 extern void *_vector_table_pointer;
@@ -23,7 +14,7 @@ struct arm_vector_table {
     uint32_t reset;
 };
 
-void jump_image(unsigned long address)
+void sbk_jump_image(unsigned long address)
 {
         struct arm_vector_table {
                 uint32_t msp;

@@ -9,12 +9,22 @@
 #ifndef SBK_SLOT_H_
 #define SBK_SLOT_H_
 
-#include <stddef.h>
-#include <stdbool.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#include <stdint.h>
+#include <stddef.h>
+
+/**
+ * @brief sBootKit relies on the concept of slots, these slots describe any
+ * kind of storage solution used for images. 5 basic routines are defined to
+ * work with slots: read, prog(ram), close, size and address. Some of these
+ * routines are optionally defined. In sBootKit also virtual slots are used as
+ * a means to create a receiving slot for direct upload, split slots for
+ * swapping images, ...
+ *
+ */
 
 /**
  * @brief slot interface definition
@@ -22,46 +32,31 @@ extern "C" {
  */
 
 struct sbk_slot {
-        /* opaque context pointer */
-        void *ctx;
+	/* opaque context pointer */
+	void *ctx;
 
-        /* slot size */
-        size_t size;
+	/* read from the slot (needs implementation) */
+	int (*read)(const void *ctx, uint32_t off, void *data, size_t len);
 
-        /* read from the slot (needs implementation) */
-        int (*read)(const void *ctx, unsigned long off, void *data, size_t len);
+	/* program to the slot (optional implementation), on devices that
+	 * require block erase the routine should erase a block when the first
+	 * byte is written.
+	 */
+	int (*prog)(const void *ctx, uint32_t off, const void *data, size_t len);
 
-        /* open a slot (optional implementation), any required initialisation
-         * needs to be performed in this routine
-         */
-        int (*open)(const void *ctx);
+	/* close a slot (optional implementation), any required synching of
+	 * buffers needs to be performed in this routine
+	 */
+	int (*close)(const void *ctx);
 
-        /* close a slot (optional implementation), any required synching of
-         * buffers needs to be performed in this routine
-         */
-        int (*close)(const void *ctx);
+	/* get the slot size (optional implementation).
+	 */
+	int (*size)(const void *ctx, size_t *size);
 
-        /* program to the slot (optional implementation), on devices that
-         * require block erase the routine should erase a block when the first
-         * byte is written.
-         */
-        int (*prog)(const void *ctx, unsigned long off, const void *data,
-                    size_t len);
-
-        /* convert off to absolute address (optional implementation) */
-        int (*address)(const void *ctx, unsigned long off, unsigned long *addr);
+	/* convert off to absolute address (optional implementation)
+	 */
+	int (*address)(const void *ctx, uint32_t *addr);
 };
-
-/** @brief sbk_slot_get, needs to be provided by os
- *
- * retrieve a physical slot for usage by bootloader, the slots are considered
- * indexed by a slot number (slot_no).
- * @param: slot: pointer to the slot,
- * @param: slot_no: slot index,
- * @retval: 0 if succesful, any nonzero value if slot_no exceeds number of slots
- *
- */
-extern int (*sbk_slot_get)(struct sbk_slot *slot, unsigned int slot_no);
 
 /**
  * @brief Interface routines to read/write slots used by bootloader.
@@ -69,27 +64,20 @@ extern int (*sbk_slot_get)(struct sbk_slot *slot, unsigned int slot_no);
  */
 
 /**
- * @brief sbk_slot_open
- *
- * open (initialize) a slot
- */
-int sbk_slot_open(struct sbk_slot *slot);
-
-/**
  * @brief sbk_slot_read
  *
  * read data from a slot
  */
-int sbk_slot_read(const struct sbk_slot *slot, unsigned long off, void *data,
-                  size_t len);
+int sbk_slot_read(const struct sbk_slot *slot, uint32_t off, void *data,
+		  size_t len);
 
 /**
  * @brief sbk_slot_program
  *
  * program data to a slot
  */
-int sbk_slot_prog(const struct sbk_slot *slot, unsigned long off,
-                  const void *data, size_t len);
+int sbk_slot_prog(const struct sbk_slot *slot, uint32_t off, const void *data,
+		  size_t len);
 
 /**
  * @brief sbk_slot_close
@@ -99,12 +87,30 @@ int sbk_slot_prog(const struct sbk_slot *slot, unsigned long off,
 int sbk_slot_close(const struct sbk_slot *slot);
 
 /**
+ * @brief sbk_slot_size
+ *
+ * get the size of a slot
+ */
+int sbk_slot_size(const struct sbk_slot *slot, size_t *size);
+
+/**
  * @brief sbk_slot_address
  *
  * translate offset to absolute address
  */
-int sbk_slot_address(const struct sbk_slot *slot, unsigned long off,
-                     unsigned long *address);
+int sbk_slot_address(const struct sbk_slot *slot, uint32_t *address);
+
+/**
+ * @brief Slot routines that need to be provided by the os.
+ *
+ */
+
+extern int sbk_open_bootable_slot(struct sbk_slot *slot, unsigned char idx);
+extern int sbk_open_destination_slot(struct sbk_slot *slot, unsigned char idx);
+extern int sbk_open_upload_slot(struct sbk_slot *slot, unsigned char idx);
+extern int sbk_open_backup_slot(struct sbk_slot *slot, unsigned char idx);
+extern int sbk_open_shareddata_slot(struct sbk_slot *slot, unsigned char idx);
+extern int sbk_open_key_slot(struct sbk_slot *slot, unsigned char idx);
 
 #ifdef __cplusplus
 } /* extern "C" */

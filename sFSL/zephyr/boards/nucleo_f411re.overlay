@@ -4,12 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/{
-	chosen {
-		zephyr,code-partition = &sfsl_partition;
-	};
-};
-
 &flash0 {
 	partitions {
 		compatible = "fixed-partitions";
@@ -50,6 +44,3 @@
 		};
 	};
 };
-
-
-

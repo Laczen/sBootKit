@@ -9,11 +9,12 @@
 #ifndef SBK_UTIL_H_
 #define SBK_UTIL_H_
 
-#include <stdint.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#include <stddef.h>
+#include <stdint.h>
 
 #define SBK_MIN(a,b) (a < b ? a : b)
 #define SBK_MAX(a,b) (a < b ? b : a)
@@ -30,6 +31,8 @@ enum sbk_error_codes {
         SBK_EC_EFAULT = 14,
         SBK_EC_EINVAL = 22,
 };
+
+uint8_t sbk_crc8(uint8_t crc8, void *data, size_t len);
 
 #ifdef __cplusplus
 } /* extern "C" */

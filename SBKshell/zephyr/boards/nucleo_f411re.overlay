@@ -12,6 +12,62 @@
 	};
 };
 
+&usart1 {
+	status = "disabled";
+};
+
+&i2c1 {
+	status = "disabled";
+};
+
+&i2c2 {
+	status = "disabled";
+};
+
+&i2c3 {
+	status = "disabled";
+};
+
+&i2s1 {
+	status = "disabled";
+};
+
+&spi1 {
+	status = "disabled";
+};
+
+&rtc {
+	status = "disabled";
+};
+
+&gpiob {
+	status = "disabled";
+};
+
+&gpioc {
+	status = "disabled";
+};
+
+&gpiod {
+	status = "disabled";
+};
+
+&gpioe {
+	status = "disabled";
+};
+
+&gpiof {
+	status = "disabled";
+};
+
+&gpiog {
+	status = "disabled";
+};
+
+&gpioh {
+	status = "disabled";
+};
+
 &flash0 {
 	partitions {
 		compatible = "fixed-partitions";

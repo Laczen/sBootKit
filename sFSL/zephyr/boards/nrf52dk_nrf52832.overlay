@@ -9,12 +9,6 @@
 /delete-node/ &slot1_partition;
 /delete-node/ &storage_partition;
 
-/ {
-	chosen {
-		zephyr,code-partition = &sfsl_partition;
-	};
-};
-
 &flash0 {
 	partitions {
 		compatible = "fixed-partitions";
@@ -23,7 +17,7 @@
 
 		sfsl_partition: partition@0 {
 			label = "sFSL";
-			reg = <0x00000000 0x00007000>;
+			reg = <0x00000000 0x00002000>;
 		};
 
 		storage_partition: partition@2000 {
@@ -66,5 +60,6 @@
 	};
 };
 
-
-
+&sram0 {
+	reg = <0x20000000 0xFFE0>;
+};

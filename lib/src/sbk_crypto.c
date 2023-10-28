@@ -80,7 +80,7 @@ void sbk_crypto_auth_update(void *state, const void *data, size_t len)
 void sbk_crypto_auth_final(void *tag, void *state)
 {
 	crypto_hmac_sha256_final(tag, state);
-	sbk_crypto_wipe(state, sbk_crypto_auth_state_size());
+	sbk_crypto_cwipe(state, sbk_crypto_auth_state_size());
 }
 
 size_t sbk_crypto_cipher_block_size(void)

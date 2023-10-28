@@ -79,23 +79,22 @@ int main(void)
 			continue;
 		}
 
-		sbk_image_swap(&slot, &slot, &slot, 1024U);
-
 		shared_data.bcnt++;
 
-		SBK_IMAGE_STATE_CLR_FLAGS(st.state_flags);
-		rc = sbk_image_get_state_fsl(&slot, &st);
+		rc = sbk_image_can_run(&slot, &st);
 		(void)sbk_slot_close(&slot);
 		SBK_LOG_DBG("Image state: %x address %x", st.state_flags,
-			    st.image_start_address);
-		if ((rc == 0) && (SBK_IMAGE_STATE_CAN_BOOT(st.state_flags))) {
-			if (SBK_IMAGE_STATE_CONF_IS_SET(st.state_flags)) {
+			    st.im.image_start_address);
+		if (rc == 0) {
+			if ((SBK_IMAGE_STATE_ICONF_IS_SET(st.state_flags)) ||
+			    (SBK_IMAGE_STATE_SCONF_IS_SET(st.state_flags))) {
 				shared_data.bcnt = 0U;
 			}
 
 			SBK_LOG_DBG("Jumping to address: %x bcnt: %d",
-				    st.image_start_address, shared_data.bcnt);
-			sbk_jump_image(st.image_start_address);
+				    st.im.image_start_address,
+				    shared_data.bcnt);
+			sbk_jump_image(st.im.image_start_address);
 		}
 
 		shared_data.bslot++;

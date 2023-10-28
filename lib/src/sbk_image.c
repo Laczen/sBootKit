@@ -74,7 +74,7 @@ static int sbk_image_get_tagdata(const struct sbk_slot *slot, uint16_t tag,
 	}
 
 	rdsize = SBK_MIN(size, info.size);
-	return sbk_image_read_tag_data(slot, info.pos, data, rdsize);
+	rc = sbk_slot_read(slot, info.pos, data, rdsize);
 end:
 	return rc;
 }
@@ -122,7 +122,7 @@ static void sbk_image_get_ciph_key(const struct sbk_image_meta *meta,
 	uint8_t ltkey[SBK_IMAGE_LTKEY_SIZE];
 	const size_t salt_sz = SBK_IMAGE_SALT_SIZE;
 
-	sbk_image_get_pkey(ltkey, sizeof(ltkey));
+	sbk_image_get_ltkey(ltkey, sizeof(ltkey));
 	sbk_crypto_kxch_init(prk, meta->salt, salt_sz, ltkey, sizeof(ltkey));
 	sbk_crypto_kxch_final(otk, prk, SBK_IMAGE_CIPH_CONTEXT,
 			      sizeof(SBK_IMAGE_CIPH_CONTEXT) - 1);
@@ -145,7 +145,7 @@ bool sbk_image_hmac_ok(const struct sbk_slot *slot,
 
 	pos = info.pos + info.size;
 	len = meta->image_offset + meta->image_size - pos;
-	sbk_image_get_auth_key(meta, otk);
+	sbk_image_get_hmac_key(meta, otk);
 	sbk_crypto_auth_init(sbuf, otk, sizeof(otk));
 	sbk_crypto_cwipe(otk, sizeof(otk));
 
@@ -446,7 +446,7 @@ end:
 }
 
 struct sbk_boot_slot_ctx {
-	struct sbk_slot *slt;
+	const struct sbk_slot *slt;
 	uint32_t split_pos;
 	uint32_t split_jmp;
 };
@@ -454,7 +454,7 @@ struct sbk_boot_slot_ctx {
 int boot_slot_read(const void *ctx, uint32_t off, void *data, size_t len)
 {
 	struct sbk_boot_slot_ctx *bsctx = (struct sbk_boot_slot_ctx *)ctx;
-	uint8_t data8 = (uint8_t *)data;
+	uint8_t *data8 = (uint8_t *)data;
 	int rc;
 
 	if (bsctx->split_pos == 0U) {

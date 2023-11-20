@@ -1,5 +1,4 @@
 # copyright 2019 LaczenJMS
-# Copyright 2017 Linaro Limited
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,8 +17,9 @@ Cryptographic key management for sbktool.
 """
 
 from Crypto.IO import PEM
+from Crypto.PublicKey import ECC
 
-from .pk import PK, PKUsageError
+from .sbktcrypto import SBKTCrypto
 
 class PasswordRequired(Exception):
     """Raised to indicate that the key is password protected, but a
@@ -31,9 +31,11 @@ def load(path, passwd=None):
     with open(path, 'r') as f:
         raw_pem = f.read()
     try:
-        [pk, marker, encrypted] = PEM.decode(raw_pem, passphrase = passwd)
-        return PK(pk)
-    except ValueError as e:
-        msg = str(e)
-        if "Incorrect password?" in msg:
+        pk = ECC.import_key(raw_pem, passphrase = passwd)
+        return SBKTCrypto(pk, 'p256')
+    except:
+        try:
+            [pk, marker, encrypted] = PEM.decode(raw_pem, passphrase = passwd)
+            return SBKTCrypto(pk, 'rpk')
+        except:
             return None

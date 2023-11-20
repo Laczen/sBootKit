@@ -18,6 +18,9 @@ assert_exists(SBOOTKIT_DIR)
 # Path to mincrypt library source subdirectory of root.
 set(MINCRYPT_DIR "${ROOT_DIR}/ext/mincrypt")
 assert_exists(MINCRYPT_DIR)
+# Path to p256-m library source subdirectory of root.
+set(P256M_DIR "${ROOT_DIR}/ext/p256-m")
+assert_exists(MINCRYPT_DIR)
 
 if(CONFIG_SBK)
 
@@ -41,6 +44,14 @@ zephyr_library_sources_ifdef(CONFIG_SBK_MINCRYPT
     ${MINCRYPT_DIR}/src/crypto_chacha20poly1305.c
     ${MINCRYPT_DIR}/src/crypto_sha256.c
 )
+
+zephyr_include_directories_ifdef(CONFIG_SBK_P256M
+    ${P256MDIR}
+)
+zephyr_library_sources_ifdef(CONFIG_SBK_P256M
+    ${P256MDIR}/p256-m.c
+)
+
 
 zephyr_compile_definitions(CONFIG_SBK_UTIL_INCLUDE=zephyr_util.h)
 

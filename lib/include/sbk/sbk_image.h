@@ -14,31 +14,25 @@ extern "C" {
 #include "sbk/sbk_product.h"
 
 #define SBK_IMAGE_WBS		64
-#define SBK_IMAGE_AUTH_TAG	0x7FFF
-#define SBK_IMAGE_META_TAG	0x8000
+
+#define SBK_IMAGE_INFO_TAG	0x8000
+#define SBK_IMAGE_HMAC_TAG	0x8FFE
+#define SBK_IMAGE_P256SIG_TAG	0x8FFF
 
 #define SBK_IMAGE_FLAG_CONFIRMED	0x00000001	/* Confirmed image */
 #define SBK_IMAGE_FLAG_ENCRYPTED	0x00000010	/* Encrypted image */
 #define SBK_IMAGE_FLAG_ZLIB		0x00000020	/* ZLIB compr. image */
 #define SBK_IMAGE_FLAG_VCDIFF		0x00000040	/* VCDIFF image */
 #define SBK_IMAGE_FLAG_AL_MASK		0xF0000000	/* Alignment mask */
-#define SBK_IMAGE_FLAG_AL_SHIFT		28		/* Alignment shift */
+#define SBK_IMAGE_FLAG_AL_SHIFT		28	/* Alignment shift */
+#define SBK_IMAGE_HASH_SIZE		32	/* (truncated) hash size */
 
-#ifndef CONFIG_SBK_IMAGE_AUTHENTICATE
-#define CONFIG_SBK_IMAGE_AUTHENTICATE 0	/* Fall back to no authentication */
-#endif /* CONFIG_SBK_IMAGE_AUTHENTICATE */
-
-#define SBK_IMAGE_LTKEY_SIZE		32	/* Long term key size */
-#define SBK_IMAGE_SALT_SIZE		16	/* NONCE Size */
-
-#define SBK_IMAGE_SIG_SIZE		64	/* Signature size */
-#define SBK_IMAGE_SIG_PKHASH_SIZE	32	/* Signature pubkey hash size */
-#define SBK_IMAGE_HMAC_SIZE		32	/* HMAC size */
-
+#define SBK_IMAGE_HMAC_SIZE	32	/* HMAC size */
+#define SBK_IMAGE_SALT_SIZE	16	/* Package salt size */
 #define SBK_IMAGE_HMAC_CONTEXT 	"SBK HMAC"
 #define SBK_IMAGE_CIPH_CONTEXT	"SBK CIPHER"
 
-#define SBK_IMAGE_DEFAULT_KSLOTIDX	0xff
+#define SBK_IMAGE_SIG_SIZE	64	/* Signature size */
 
 #define SBK_IMAGE_STATE_PDEP	0x00000001 /* Image product dependency mask */
 #define SBK_IMAGE_STATE_IDEP    0x00000002 /* Image image dependency mask */
@@ -51,51 +45,51 @@ extern "C" {
 struct sbk_slot;
 
 struct __attribute__((packed)) sbk_image_rec_hdr {
-	uint16_t tag; /* odd-parity tag */
+	uint16_t tag; /* record tag */
 	uint16_t len; /* record length */
 };
 
-struct __attribute__((packed)) sbk_image_auth {
-	struct sbk_image_rec_hdr rhdr;		/* record tag + length */
-	uint8_t hhmac[SBK_IMAGE_HMAC_SIZE];	/* header hmac */
-	uint8_t fhmac[SBK_IMAGE_HMAC_SIZE];	/* full hmac (hdr + image) */
-	uint8_t sig_pubkey_hash[SBK_IMAGE_SIG_PKHASH_SIZE];
-	uint8_t sig[SBK_IMAGE_SIG_SIZE];	/* signature over hhmac + fhmac */
+struct __attribute__((packed)) sbk_image_meta {	/* image info */
+	struct sbk_image_rec_hdr rhdr;
+	uint32_t image_sequence_number;		/* image sequence number */
+	struct sbk_version image_version;	/* image version */
+	uint32_t image_flags;	/* image flags (contains alignment) */
+	uint32_t image_size;	/* image size */
+	uint32_t image_start_address;	/* image destination address */
+	uint16_t image_offset;	/* image offset in package */
+	uint16_t image_dep_tag;		/* first tag with image dependency */
+	uint16_t product_dep_tag;	/* first tag with product dependency */
+	uint16_t other_tag;
+	uint8_t image_hash[SBK_IMAGE_HASH_SIZE];	/* (truncated) hash */
 };
 
-struct __attribute__((packed)) sbk_image_meta {
-	struct sbk_image_rec_hdr rhdr;	/* record tag + length */
-	uint8_t salt[SBK_IMAGE_SALT_SIZE];	/* image salt size */
-	uint32_t image_sequence_number; /* increasing anti-rollback number */
-	uint32_t image_start_address;
-	uint32_t image_flags;           /* flags descr. image properties */
-	uint32_t image_size;            /* image size without header */
-	uint16_t image_offset;		/* image offset from start of header */
-	uint16_t image_dep_tag;		/* first tag descr. image dependencies */
-	uint16_t product_dep_tag;	/* first tag descr. product dependency */
-	uint16_t other_tag;		/* first tag describing other data */
-	struct sbk_version image_version;
-};
-
-struct __attribute__((packed)) sbk_image_dep_info {
-	struct sbk_image_rec_hdr rhdr;	/* record tag + length */
+struct __attribute__((packed)) sbk_image_dep_info {	/* image dependency */
+	struct sbk_image_rec_hdr rhdr;
 	struct sbk_version_range vrange;
 	uint32_t image_start_address; 	/* dependent image start address */
 	uint16_t next_tag;
 	uint16_t pad16;
 };
 
-struct __attribute__((packed)) sbk_product_dep_info {
-	struct sbk_image_rec_hdr rhdr;	/* record tag + length */
+struct __attribute__((packed)) sbk_product_depinfo {	/* product dependency */
+	struct sbk_image_rec_hdr rhdr;
 	struct sbk_version_range vrange;
-	uint32_t product_hash;
+	uint8_t product_hash[SBK_IMAGE_HASH_SIZE];	/* product hash */
 	uint16_t next_tag;
 	uint16_t pad16;
 };
 
+struct __attribute__((packed)) sbk_image_meta_pauth {	/* authentication . */
+	struct sbk_image_meta_rec_hdr rhdr;
+	uint8_t salt[SBK_IMAGE_META_SALT_SIZE];		/* auth. salt */
+	uint8_t hmac[SBK_IMAGE_META_HMAC_SIZE];		/* auth. hmac */
+	uint8_t pk_hash[SBK_IMAGE_META_HASH_SIZE];	/* auth. pubkey hash */
+	uint8_t sign[SBK_IMAGE_META_SIG_SIZE];		/* auth. signature */
+};
+
 struct sbk_image_state {
 	uint32_t state_flags;
-	struct sbk_image_meta im;
+	struct sbk_image_meta_image_info info;
 };
 
 struct sbk_stream_image_ctx {

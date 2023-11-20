@@ -17,120 +17,116 @@ extern "C" {
  * @{
  */
 
-size_t sbk_crypto_kxch_prk_size(void);
-size_t sbk_crypto_kxch_km_size(void);
+struct sbk_crypto_read_ctx {
+        const void *ctx;
+        int (*read)(const void *ctx, uint32_t off, void *data, size_t len);
+};
+
+
+struct sbk_crypto_kxch_ctx {
+        const void *pkey;
+        size_t pkey_size;
+        const void *salt;
+        size_t salt_size;
+	const void *context;
+        size_t context_size;
+};
+
+struct sbk_crypto_hmac_ctx {
+        const void *key;
+        size_t key_size;
+        const void *hmac;
+        size_t hmac_size;
+};
+
+struct sbk_crypto_hash_ctx {
+        const void *hash;
+        size_t hash_size;
+};
+
+struct sbk_crypto_sigp256_ctx {
+        const void *pubkey;
+        size_t pubkey_size;
+        const void *signature;
+        size_t signature_size;
+};
+
+struct sbk_crypto_ciphered_read_ctx {
+        const struct sbk_crypto_read_ctx *read_ctx;
+        const void *key;
+        size_t key_size;
+};
 
 /**
- * @brief sbk_crypto_cwipe
+ * @brief sbk_crypto_kxch
  *
- * clear a crypto buffer.
+ * Key exchange
  *
- * @retval state size
+ * @param ctx: key exhange context,
+ * @param keymaterial: returned key material,
+ * @param keymaterial_size: expected size of key material,
  */
-void sbk_crypto_cwipe(void *secret, size_t size);
+void sbk_crypto_kxch(const struct sbk_crypto_kxch_ctx *ctx, void *keymaterial,
+                     size_t keymaterial_size);
 
 /**
- * @brief sbk_crypto_compare
+ * @brief sbk_crypto_hmac_vrfy
  *
- * @param s1 array to compare
- * @param s2 array to compare
- * @param len length to compare
- * @return 0 if equal, nonzero otherwise
+ * Verify hmac.
+ *
+ * @param ctx: hmac context
+ * @param read_ctx: data read context
+ * @param msg_len: length of the message to verify
+ * @return 0 if valid, nonzero otherwise
+ *
  */
-int sbk_crypto_compare(const void *s1, const void *s2, size_t len);
+int sbk_crypto_hmac_vrfy(const struct sbk_crypto_hmac_ctx *ctx,
+                         const struct sbk_crypto_read_ctx *read_ctx,
+                         size_t msg_len);
 
 /**
- * @brief sbk_crypto_kxch_init
+ * @brief sbk_crypto_hash_vrfy
  *
- * Key exchange initialize
+ * Verify hash.
  *
- * @param prk: returned pseudo random key,
- * @param salt: salt used in the prk generation,
- * @param salt_size: salt size,
- * @param pkey: private key,
- * @param pkey_size: private key size,
+ * @param ctx: hash context
+ * @param read_ctx: data read context
+ * @param msg_len: length of the message to verify
+ * @return 0 if valid, nonzero otherwise
  */
-void sbk_crypto_kxch_init(void *prk, const void *salt, size_t salt_size,
-                          const void *pkey, size_t pkey_size);
+int sbk_crypto_hash_vrfy(const struct sbk_crypto_hash_ctx *ctx,
+                         const struct sbk_crypto_read_ctx *read_ctx,
+                         size_t msg_len);
 
 /**
- * @brief sbk_crypto_kxch_final
+ * @brief sbk_crypto_sigp256_vrfy
  *
- * Key exchange finalize
+ * Verify p256 signature.
  *
- * @param keymaterial: returned keymaterial (of size SBK_CRYPTO_KM_SIZE)
- * @param prk: returned pseudo random key,
- * @param context: context used in the keymaterial generation,
- * @param context_size:
+ * @param ctx: sigp256 context
+ * @param read_ctx: data read context
+ * @param msg_len: length of the message to verify
+ * @return 0 if valid, nonzero otherwise
  */
-void sbk_crypto_kxch_final(void *keymaterial, const void *prk,
-                           const void *context, size_t context_size);
+int sbk_crypto_sigp256_vrfy(const struct sbk_crypto_sigp256_ctx *ctx,
+                            const struct sbk_crypto_read_ctx *read_ctx,
+                            size_t msg_len);
 
-size_t sbk_crypto_auth_block_size(void);
-size_t sbk_crypto_auth_state_size(void);
+size_t sbk_crypto_ciphered_read_km_size(void);
 
 /**
- * @brief sbk_crypto_auth_init
+ * @brief sbk_crypto_ciphered_read
  *
- * Initialize an authentication request.
+ * Read ciphered data, ciphers unencrypted data, unciphers encrypted data
  *
- * @param state: authentication state
- * @param key: key used for authentication,
- * @param key_size:
+ * @param ctx: ciphered read context
+ * @param off: offset from start
+ * @param data: output data
+ * @param len: length to read
+ * @return 0 if OK, nonzero otherwise
  */
-void sbk_crypto_auth_init(void *state, const void *key, size_t key_size);
-
-/**
- * @brief sbk_crypto_auth_update
- *
- * Update authentication.
- *
- * @param state: authentication state
- * @param data: data
- * @param len: data size
- */
-void sbk_crypto_auth_update(void *state, const void *data, size_t len);
-
-/**
- * @brief sbk_crypto_auth_final
- *
- * Finalize authentication.
- *
- * @param returned authentication tag
- * @param state: authentication state
- *
- */
-void sbk_crypto_auth_final(void *tag, void *state);
-
-size_t sbk_crypto_cipher_block_size(void);
-size_t sbk_crypto_cipher_key_size(void);
-size_t sbk_crypto_cipher_nonce_size(void);
-size_t sbk_crypto_cipher_state_size(void);
-
-/**
- * @brief sbk_crypto_cipher_init
- *
- * Initialize an cipher request.
- *
- * @param state: cipher state
- * @param km: key material (key-nonce) used for cipher,
- * @param km_size:
- * @param cnt: block counter
- */
-void sbk_crypto_cipher_init(void *state, const void *km, size_t km_size,
-                            uint32_t cnt);
-
-/**
- * @brief sbk_crypto_cipher
- *
- * cipher the data (this erases the state).
- *
- * @param out: ciphered msg
- * @param in: msg
- * @param len: msg size
- * @param state: cipher state
- */
-void sbk_crypto_cipher(void *out, const void *in, size_t len, void *state);
+int sbk_crypto_ciphered_read(const struct sbk_crypto_ciphered_read_ctx *ctx,
+                             uint32_t off, void *data, size_t len);
 
 /**
  * @}

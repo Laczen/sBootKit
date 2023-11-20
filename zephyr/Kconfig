@@ -13,6 +13,9 @@ config SBK
 config SBK_MINCRYPT
         bool "Enable mincrypt"
 
+config SBK_P256M
+        bool "Enable p256-m"
+
 if SBK
 
 module = SBK

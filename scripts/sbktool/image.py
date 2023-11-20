@@ -24,7 +24,7 @@ import binascii
 import hashlib
 import struct
 import os.path
-import sbktool.keys as keys
+import sbktool.sbktcrypto as sbktcrypto
 
 from Crypto.Random import get_random_bytes
 from Crypto.Hash import SHA256, HMAC
@@ -246,7 +246,7 @@ class Image():
 
         if encrypt:
             self.flags |= SBK_IMAGE_FLAG_ENCRYPTED
-        
+
         if confirm:
             self.flags |= SBK_IMAGE_FLAG_CONFIRMED
 
@@ -276,5 +276,3 @@ class Image():
         self.ldr_fhmac = h.digest()
 
         self.add_auth()
-
-

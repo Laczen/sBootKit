@@ -17,28 +17,13 @@
 
 import click
 import getpass
-import sbktool.keys as keys
+import sbktool.sbktcrypto as sbktcrypto
 from sbktool import image
 from sbktool import upload as upl
 from sbktool.version import decode_version
 import sys
 
 sys.tracebacklimit = 0
-
-def gen_pk(keyfile, passwd):
-    keys.PK.generate().export_private(keyfile, passwd=passwd)
-
-def load_key(keyfile):
-    # TODO: better handling of invalid pass-phrase
-    key = keys.load(keyfile)
-    if key is not None:
-        return key
-    passwd = "sBootKit".encode('utf-8')
-    key = keys.load(keyfile, passwd)
-    if key is not None:
-        return key
-    passwd = getpass.getpass("Enter key passphrase: ").encode('utf-8')
-    return keys.load(keyfile, passwd)
 
 def get_password():
     while True:
@@ -54,19 +39,34 @@ def get_password():
 
 @click.option('-p', '--password', is_flag=True,
               help='Prompt for password to protect key')
-@click.option('-k', '--key', metavar='filename', required=True)
+@click.option('-k', '--keyfile', metavar='filename', required=True)
+@click.option('-t', '--type', type = click.Choice(['rpk', 'p256']),
+              default = 'rpk', help = 'Select key type')
 @click.command(help='Generate key file for use with sbktool')
-def genkey(key, password):
+def genkey(keyfile, password, type):
     password = get_password() if password else "sBootKit".encode('utf-8')
-    gen_pk(key, password)
+    if type == 'rpk':
+        key = sbktcrypto.SBKTCrypto.generate('rpk')
+    else:
+        key = sbktcrypto.SBKTCrypto.generate('p256')
+    key.export_private(path=keyfile, passwd=password)
+    print("Done exporting {}-key".format(key.type))
 
-@click.option('-pk', '--privatekey', metavar='filename', required=True)
-@click.command(help='Generate sFSL or sLDR keys.h file')
-def geninclude(privatekey):
-    key = load_key(privatekey)
+def load_key(keyfile):
+    # TODO: better handling of invalid pass-phrase
+    passwd = "sBootKit".encode('utf-8')
+    key = sbktcrypto.load(keyfile, passwd)
     if key is not None:
-        print("#define SBK_PRIV_KEY \\")
-        key.emit_private()
+        return key
+    passwd = getpass.getpass("Enter key passphrase: ").encode('utf-8')
+    return sbktcrypto.load(keyfile, passwd)
+
+@click.option('-k', '--key', metavar='filename', required=True)
+@click.command(help='Generate key to include in sFSL (pub) or sLDR')
+def geninclude(key):
+    key = load_key(key)
+    if key is not None:
+        key.emit()
 
 def validate_version(ctx, param, value):
     try:

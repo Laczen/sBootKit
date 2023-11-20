@@ -17,6 +17,7 @@ Cryptographic key management for sbktool.
 """
 
 from Crypto.IO import PEM
+from Crypto.Hash import SHA256
 from Crypto.PublicKey import ECC
 
 from .sbktcrypto import SBKTCrypto
@@ -39,3 +40,7 @@ def load(path, passwd=None):
             return SBKTCrypto(pk, 'rpk')
         except:
             return None
+
+def sha256(payload):
+    h = SHA256.new(payload)
+    return h.digest()

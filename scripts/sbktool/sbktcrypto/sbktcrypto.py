@@ -16,7 +16,11 @@
 
 import sys
 from Crypto.Random import get_random_bytes
+from Crypto.Hash import SHA256, HMAC
+from Crypto.Protocol.KDF import HKDF
+from Crypto.Cipher import ChaCha20
 from Crypto.PublicKey import ECC
+from Crypto.Signature import DSS
 from Crypto.IO import PEM
 
 RANDOM_KEY_SIZE = 32
@@ -26,7 +30,7 @@ class SBKTCryptoUsageError(Exception):
 
 class SBKTCrypto(object):
     """
-    Wrapper around private keys.
+    Wrapper around private keys (random: 'prk' and p256: 'p256').
     """
 
     def __init__(self, key, type):
@@ -80,3 +84,32 @@ class SBKTCrypto(object):
                 print(indent + "\"", end='')
             print("\\x{:02x}".format(b), end='')
         print("\"" + "\n")
+
+    def rpk_sign(self, salt, context, payload):
+        if (self.type == 'p256'):
+            return None
+        km = HKDF(self.key, 44, salt, SHA256, 1, context)
+        h = HMAC.new(km, digestmod=SHA256)
+        h.update(payload)
+        return h.digest()
+
+    def rpk_encrypt(self, salt, context, payload):
+        if (self.type == 'p256'):
+            return None
+        km = HKDF(self.key, 44, salt, SHA256, 1, context)
+        cipher = ChaCha20.new(key=km[0:32], nonce=km[32:44])
+        return cipher.encrypt(payload)
+
+    def p256_sign(self, payload):
+        if (self.type == 'rpk'):
+            return None
+        h = SHA256.new(payload)
+        signer = DSS.new(self.key, 'deterministic-rfc6979')
+        return signer.sign(h)
+
+    def p256_pubkeyhash(self):
+        kdata = self.key.public_key().export_key(format='raw')
+        # drop the first element as this is a indication of the key type
+        # (public key raw data: x04)
+        h = SHA256.new(kdata[1:])
+        return h.digest()

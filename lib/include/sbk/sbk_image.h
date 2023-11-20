@@ -16,21 +16,19 @@ extern "C" {
 #define SBK_IMAGE_WBS		64
 
 #define SBK_IMAGE_INFO_TAG	0x8000
-#define SBK_IMAGE_HMAC_TAG	0x8FFE
-#define SBK_IMAGE_P256SIG_TAG	0x8FFF
+#define SBK_IMAGE_SLDR_TAG	0x80FE
+#define SBK_IMAGE_SFSL_TAG	0x80FF
 
 #define SBK_IMAGE_FLAG_CONFIRMED	0x00000001	/* Confirmed image */
 #define SBK_IMAGE_FLAG_ENCRYPTED	0x00000010	/* Encrypted image */
 #define SBK_IMAGE_FLAG_ZLIB		0x00000020	/* ZLIB compr. image */
 #define SBK_IMAGE_FLAG_VCDIFF		0x00000040	/* VCDIFF image */
-#define SBK_IMAGE_FLAG_AL_MASK		0xF0000000	/* Alignment mask */
-#define SBK_IMAGE_FLAG_AL_SHIFT		28	/* Alignment shift */
 #define SBK_IMAGE_HASH_SIZE		32	/* (truncated) hash size */
 
 #define SBK_IMAGE_HMAC_SIZE	32	/* HMAC size */
 #define SBK_IMAGE_SALT_SIZE	16	/* Package salt size */
 #define SBK_IMAGE_HMAC_CONTEXT 	"SBK HMAC"
-#define SBK_IMAGE_CIPH_CONTEXT	"SBK CIPHER"
+#define SBK_IMAGE_CIPH_CONTEXT	"SBK CIPH"
 
 #define SBK_IMAGE_SIG_SIZE	64	/* Signature size */
 
@@ -49,14 +47,14 @@ struct __attribute__((packed)) sbk_image_rec_hdr {
 	uint16_t len; /* record length */
 };
 
-struct __attribute__((packed)) sbk_image_meta {	/* image info */
+struct __attribute__((packed)) sbk_image_info {	/* image info */
 	struct sbk_image_rec_hdr rhdr;
 	uint32_t image_sequence_number;		/* image sequence number */
 	struct sbk_version image_version;	/* image version */
-	uint32_t image_flags;	/* image flags (contains alignment) */
-	uint32_t image_size;	/* image size */
+	uint32_t image_flags;		/* image flags (contains alignment) */
+	uint32_t image_size;		/* image size */
 	uint32_t image_start_address;	/* image destination address */
-	uint16_t image_offset;	/* image offset in package */
+	uint16_t image_offset;		/* image offset in package */
 	uint16_t image_dep_tag;		/* first tag with image dependency */
 	uint16_t product_dep_tag;	/* first tag with product dependency */
 	uint16_t other_tag;
@@ -79,12 +77,16 @@ struct __attribute__((packed)) sbk_product_depinfo {	/* product dependency */
 	uint16_t pad16;
 };
 
-struct __attribute__((packed)) sbk_image_meta_pauth {	/* authentication . */
+struct __attribute__((packed)) sbk_image_ldrauth {	/* loader authent. */
 	struct sbk_image_meta_rec_hdr rhdr;
-	uint8_t salt[SBK_IMAGE_META_SALT_SIZE];		/* auth. salt */
-	uint8_t hmac[SBK_IMAGE_META_HMAC_SIZE];		/* auth. hmac */
-	uint8_t pk_hash[SBK_IMAGE_META_HASH_SIZE];	/* auth. pubkey hash */
-	uint8_t sign[SBK_IMAGE_META_SIG_SIZE];		/* auth. signature */
+	uint8_t salt[SBK_IMAGE_SALT_SIZE];	/* authent./cipher salt */
+	uint8_t hmac[SBK_IMAGE_HMAC_SIZE];	/* authent. hmac */
+};
+
+struct __attribute__((packed)) sbk_image_fslauth {	/* fsl authent. */
+	struct sbk_image_meta_rec_hdr rhdr;
+	uint8_t pk_hash[SBK_IMAGE_HASH_SIZE];	/* authent. pubkey hash */
+	uint8_t sign[SBK_IMAGE_SIG_SIZE];	/* authent. signature */
 };
 
 struct sbk_image_state {

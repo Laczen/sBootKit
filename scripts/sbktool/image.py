@@ -31,18 +31,21 @@ from Crypto.Hash import SHA256, HMAC
 from Crypto.Protocol.KDF import HKDF
 from Crypto.Cipher import ChaCha20
 
-SBK_IMAGE_META_TAG = 0x8000
-SBK_IMAGE_AUTH_TAG = 0x7FFF
-SBK_IMAGE_FLAG_CONFIRMED = 0x0001
-SBK_IMAGE_FLAG_DOWNGRADE = 0x0002
-SBK_IMAGE_FLAG_ENCRYPTED = 0x0010
-SBK_IMAGE_FLAG_ZLIB = 0x0020
-SBK_IMAGE_FLAG_VCDIFF = 0x0040
+SBK_IMAGE_INFO_TAG = 0x8000
+SBK_IMAGE_SLDR_TAG = 0x80FE
+SBK_IMAGE_SFSL_TAG = 0x80FF
+SBK_IMAGE_FLAG_CONFIRMED = 0x00000001
+SBK_IMAGE_FLAG_ENCRYPTED = 0x00000010
+SBK_IMAGE_FLAG_ZLIB = 0x00000020
+SBK_IMAGE_FLAG_VCDIFF = 0x00000040
 
-SBK_SALT_SIZE = 16
-SBK_HMAC_SIZE = 32
-SBK_IMAGE_AUTH_CTX = b"SBK AUTHENTICATE"
-SBK_IMAGE_ENCR_CTX = b"SBK ENCRYPT"
+SBK_IMAGE_SALT_SIZE = 16
+SBK_IMAGE_HMAC_SIZE = 32
+SBK_IMAGE_HMAC_CONTEXT = b"SBK HMAC"
+SBK_IMAGE_CIPH_CONTEXT = b"SBK CIPH"
+
+SBK_IMAGE_HASH_SIZE = 32
+SBK_IMAGE_SIGNATURE_SIZE = 64
 
 INTEL_HEX_EXT = "hex"
 STRUCT_ENDIAN_DICT = {
@@ -55,16 +58,13 @@ class Image():
                  product_dep = None, endian = 'little', type = 'image'):
         self.hdrsize = hdrsize
         self.align = align
-        self.version = version or versmod.decode_version("0")
+        self.version = version
         self.payload = []
         self.product_dep = product_dep
         self.image_dep = image_dep
         self.endian = endian
-        self.metacnt = 0
-        self.salt = get_random_bytes(SBK_SALT_SIZE)
-        self.fsl_fhmac = bytearray([0] * SBK_HMAC_SIZE)
-        self.ldr_shmac = bytearray([0] * SBK_HMAC_SIZE)
-        self.ldr_fhmac = bytearray([0] * SBK_HMAC_SIZE)
+        self.metacnt = SBK_IMAGE_INFO_TAG
+        self.salt = get_random_bytes(SBK_IMAGE_SALT_SIZE)
         self.flags = 0
 
     def __repr__(self):
@@ -80,13 +80,6 @@ class Image():
 
     def get_tag(self):
         self.metacnt += 1
-        value = self.metacnt & 0x7FFF
-        value ^= value >> 8
-        value ^= value >> 4
-        value &= 0xf
-        if ((0x6996 >> value) & 1) == 0:
-            return self.metacnt | 0x8000
-
         return self.metacnt
 
     def check(self):
@@ -113,6 +106,7 @@ class Image():
             self.payload = bytes(self.payload) + padding
 
         self.payload = bytearray(self.payload)
+        self.hash = sbktcrypto.sha256(self.payload[self.hdrsize:])
         self.check()
 
     def save(self, path):
@@ -126,26 +120,7 @@ class Image():
         h.frombytes(bytes=self.payload, offset = self.offset)
         h.tofile(path, 'hex')
 
-    def add_auth(self):
-        e = STRUCT_ENDIAN_DICT[self.endian]
-        auth_fmt = (e +
-            'HH' +  # rec_tag + rec_len
-            '32s' +    # fsl_fhmac
-            '32s' +    # ldr_shamc
-            '32s'      # ldr_fhmac
-        )
-
-        auth = struct.pack(auth_fmt,
-            SBK_IMAGE_AUTH_TAG, struct.calcsize(auth_fmt),
-            self.fsl_fhmac,
-            self.ldr_shmac,
-            self.ldr_fhmac
-        )
-
-        self.payload[0:len(auth)] = auth
-        return len(auth)
-
-    def add_meta(self, offset):
+    def add_meta(self, sldr_key, sfsl_key):
         self.image_dep.append((
             self.offset + self.hdrsize,
             (versmod.decode_version("0"), self.version)
@@ -163,27 +138,30 @@ class Image():
         e = STRUCT_ENDIAN_DICT[self.endian]
         meta_fmt = (e +
             'HH' +  # rec_tag + rec_len
+            'I' +   # sequence number
             'BBH' + # Image version
-            'I' +   # Image start address
             'I' +   # Image flags
             'I' +   # Image size
+            'I' +   # Image start address
             'H' +   # Image offset
             'H' +   # Image dep tag
             'H' +   # Board dep tag
             'H' +   # Other tag
-            '16s'  # salt
+            '32s'   # Image hash
         )
+
         info = struct.pack(meta_fmt,
-            SBK_IMAGE_META_TAG, struct.calcsize(meta_fmt),
+            SBK_IMAGE_INFO_TAG, struct.calcsize(meta_fmt),
+            0,
             self.version.major or 0, self.version.minor or 0, self.version.revision or 0,
-            self.offset + self.hdrsize,
             self.flags,
             len(self.payload) - self.hdrsize,
+            self.offset + self.hdrsize,
             self.hdrsize,
             image_dep_tag[0],
             product_dep_tag[0],
             0,
-            self.salt,
+            self.hash,
         )
 
         image_dep_fmt = (e +
@@ -232,17 +210,48 @@ class Image():
             )
             n = n + 1
 
-        if len(info) > (self.hdrsize - offset):
+        # add sldr meta
+        e = STRUCT_ENDIAN_DICT[self.endian]
+        sldr_meta_fmt = (e +
+            'HH' +  # rec_tag + rec_len
+            '16s' +    # salt
+            '32s'      # hmac
+        )
+
+        sldr_hmac = sldr_key.rpk_sign(self.salt, SBK_IMAGE_HMAC_CONTEXT, info)
+        info += struct.pack(sldr_meta_fmt,
+            SBK_IMAGE_SLDR_TAG, struct.calcsize(sldr_meta_fmt),
+            self.salt,
+            sldr_hmac,
+        )
+
+        # add sfsl meta
+        e = STRUCT_ENDIAN_DICT[self.endian]
+        sfsl_meta_fmt = (e +
+            'HH' +  # rec_tag + rec_len
+            '32s' +    # pubkey hash
+            '64s'      # signature
+        )
+
+        sfsl_pubkeyhash = sfsl_key.p256_pubkeyhash()
+        sfsl_sig = sfsl_key.p256_sign(info)
+        info += struct.pack(sfsl_meta_fmt,
+            SBK_IMAGE_SLDR_TAG, struct.calcsize(sfsl_meta_fmt),
+            sfsl_pubkeyhash,
+            sfsl_sig,
+        )
+
+        if len(info) > self.hdrsize:
             raise Exception("Header size to small to fit meta data")
 
-        info = info + bytearray([0] * (self.hdrsize - offset - len(info)))
-        self.payload[offset:self.hdrsize] = info
+        info = info + bytearray([0] * (self.hdrsize - len(info)))
+        self.payload[:self.hdrsize] = info
         return len(info)
 
     def show(self, data):
         print('\\x' + '\\x'.join(format(x, '02x') for x in data))
 
-    def create(self, fslkey, updkey, confirm, downgrade, encrypt):
+    def create(self, sfslkey, sldrkey, confirm, encrypt):
 
         if encrypt:
             self.flags |= SBK_IMAGE_FLAG_ENCRYPTED
@@ -250,29 +259,8 @@ class Image():
         if confirm:
             self.flags |= SBK_IMAGE_FLAG_CONFIRMED
 
-        if downgrade:
-            self.flags |= SBK_IMAGE_FLAG_DOWNGRADE
-
-        meta_offset = self.add_auth()
-        self.add_meta(meta_offset)
-
-        km = HKDF(fslkey.get_private_key_bytearray(), 44, self.salt, SHA256, 1, SBK_IMAGE_AUTH_CTX)
-        h = HMAC.new(km, digestmod=SHA256)
-        h.update(self.payload[meta_offset:])
-        self.fsl_fhmac = h.digest()
-
-        km = HKDF(updkey.get_private_key_bytearray(), 44, self.salt, SHA256, 1, SBK_IMAGE_AUTH_CTX)
-        h = HMAC.new(km, digestmod=SHA256)
-        h.update(self.payload[meta_offset:self.hdrsize])
-        self.ldr_shmac = h.digest()
+        self.add_meta(sldrkey, sfslkey)
 
         if encrypt:
-            ekm = HKDF(updkey.get_private_key_bytearray(), 44, self.salt, SHA256, 1, SBK_IMAGE_ENCR_CTX)
-            cipher = ChaCha20.new(key=ekm[0:32], nonce=ekm[32:44])
-            self.payload[self.hdrsize:]=cipher.encrypt(self.payload[self.hdrsize:])
-
-        h = HMAC.new(km, digestmod=SHA256)
-        h.update(self.payload[meta_offset:])
-        self.ldr_fhmac = h.digest()
-
-        self.add_auth()
+            self.payload[self.hdrsize:]=sldrkey.rpk_encrypt(self.salt,
+                SBK_IMAGE_CIPH_CONTEXT, self.payload[self.hdrsize:])

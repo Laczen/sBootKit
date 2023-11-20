@@ -23,7 +23,7 @@ from sbktool import upload as upl
 from sbktool.version import decode_version
 import sys
 
-sys.tracebacklimit = 0
+#sys.tracebacklimit = 0
 
 def get_password():
     while True:
@@ -157,7 +157,9 @@ class BasedIntParamType(click.ParamType):
 @click.option('-hs', '--hdrsize', required = True, type = BasedIntParamType(),
               help = 'Size of the header that was prepended during image \
                       generation')
-@click.option('-v', '--version', callback = validate_version, type = str)
+@click.option('-s', '--ssnr', type = int, help = 'Security sequence number')
+@click.option('-v', '--version', callback = validate_version, type = str,
+              default = "0")
 @click.option('-prd','--product', multiple=True, type = str,
               callback = convert_product_dep,
               help = 'Product dependency, productname:version range')
@@ -166,26 +168,24 @@ class BasedIntParamType(click.ParamType):
               help = 'Image dependency, image address:version range')
 @click.option('-fk','--fslkey', metavar = 'filename', required = True,
               help = 'First stage loader authentication using the provided key')
-@click.option('-uk','--updkey', metavar = 'filename', required = True,
-              help = 'Updater authentication/encryption using the provided key')
+@click.option('-lk','--ldrkey', metavar = 'filename', required = True,
+              help = 'Loader authentication/encryption using the provided key')
 @click.option('-c','--confirm', is_flag = True, help = 'create confirmed image')
-@click.option('-d','--downgrade', is_flag = True,
-              help = 'allow image downgrade (reverting image)')
 @click.option('-e','--encrypt', is_flag = True, help = 'create encrypted image')
 @click.option('-tst', '--test-image', is_flag = True,
               help = 'generate test image as c file')
 @click.command(help='''Create a image for use with sBootKit\n
                INFILE and OUTFILE are of type hex''')
-def create(align, hdrsize, version, product, dependency, fslkey, updkey,
-           confirm, downgrade, encrypt, test_image, infile, outfile, endian):
+def create(align, hdrsize, ssnr, version, product, dependency, fslkey, ldrkey,
+           confirm, encrypt, test_image, infile, outfile, endian):
     fslkey = load_key(fslkey)
-    updkey = load_key(updkey)
-    if (fslkey is not None) and (updkey is not None):
+    ldrkey = load_key(ldrkey)
+    if (fslkey is not None) and (ldrkey is not None):
         img = image.Image(hdrsize = hdrsize, version = decode_version(version),
                           product_dep = product, image_dep = dependency,
                           endian = endian, align = align, type = type)
         img.load(infile)
-        img.create(fslkey, updkey, confirm, downgrade, encrypt)
+        img.create(fslkey, ldrkey, confirm, encrypt)
         if outfile is not None:
             img.save(outfile)
 

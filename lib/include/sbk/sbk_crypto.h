@@ -58,6 +58,16 @@ struct sbk_crypto_ciphered_read_ctx {
 };
 
 /**
+ * @brief sbk_crypto_cwipe
+ *
+ * Secure data wipe
+ *
+ * @param secret: data to wipe
+ * @param size: size to wipe
+ */
+void sbk_crypto_cwipe(void *secret, size_t size);
+
+/**
  * @brief sbk_crypto_kxch
  *
  * Key exchange

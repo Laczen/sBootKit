@@ -76,6 +76,7 @@ end:
 	sbk_crypto_cwipe(buf, sizeof(buf));
 	return rc;
 }
+
 int sbk_crypto_hmac_vrfy(const struct sbk_crypto_hmac_ctx *ctx,
                          const struct sbk_crypto_read_ctx *read_ctx,
 			 size_t msg_len)

@@ -19,26 +19,49 @@ extern "C" {
 #define SBK_IMAGE_SLDR_TAG	0x80FE
 #define SBK_IMAGE_SFSL_TAG	0x80FF
 
-#define SBK_IMAGE_FLAG_CONFIRMED	0x00000001	/* Confirmed image */
-#define SBK_IMAGE_FLAG_ENCRYPTED	0x00000010	/* Encrypted image */
-#define SBK_IMAGE_FLAG_ZLIB		0x00000020	/* ZLIB compr. image */
-#define SBK_IMAGE_FLAG_VCDIFF		0x00000040	/* VCDIFF image */
-#define SBK_IMAGE_HASH_SIZE		32	/* (truncated) hash size */
+#define SBK_IMAGE_FLAG_CONF	0x00000001	/* Confirmed image */
+#define SBK_IMAGE_FLAG_CIPH	0x00000010	/* Ciphered image */
+#define SBK_IMAGE_FLAG_ZLIB	0x00000020	/* ZLIB compr. image */
+#define SBK_IMAGE_FLAG_VCDIFF	0x00000040	/* VCDIFF image */
+#define SBK_IMAGE_HASH_SIZE	32	/* (truncated) hash size */
 
 #define SBK_IMAGE_HMAC_SIZE	32	/* HMAC size */
+#define SBK_IMAGE_HMAC_KEY_SIZE 44	/* Size of the derived key for hmac */
 #define SBK_IMAGE_SALT_SIZE	16	/* Package salt size */
 #define SBK_IMAGE_HMAC_CONTEXT 	"SBK HMAC"
 #define SBK_IMAGE_CIPH_CONTEXT	"SBK CIPH"
 
-#define SBK_IMAGE_SIG_SIZE	64	/* Signature size */
+#define SBK_IMAGE_SIGN_SIZE	64	/* Signature size */
+#define SBK_IMAGE_PUBK_SIZE	64	/* Public key size */
 
-#define SBK_IMAGE_STATE_PDEP	0x00000001 /* Image product dependency mask */
-#define SBK_IMAGE_STATE_IDEP    0x00000002 /* Image image dependency mask */
-#define SBK_IMAGE_STATE_INRS    0x00000010 /* Image in run slot */
-#define SBK_IMAGE_STATE_ICONF   0x00000020 /* Image confirmed */
-#define SBK_IMAGE_STATE_SCONF	0x00000021 /* Image in slot confirmed */
+#define SBK_IMAGE_FLAG_ISSET(flags, flag) (((flags) & (flag)) == flag)
 
 #define SBK_IMAGE_STATE_SCONF_MAGIC "CONF"
+
+#define SBK_IMAGE_STATE_FULL	0xFFFFFFFF /* All flags */
+#define SBK_IMAGE_STATE_IINF	0x00000001 /* Image info available */
+#define SBK_IMAGE_STATE_PDEP	0x00000002 /* Image product dependency ok */
+#define SBK_IMAGE_STATE_IDEP    0x00000004 /* Image image dependency ok */
+#define SBK_IMAGE_STATE_INRS    0x00000008 /* Image in run slot */
+
+#define SBK_IMAGE_STATE_BAUT	0x00000010 /* Boot authentication ok */
+#define SBK_IMAGE_STATE_BHSH	0x00000020 /* Boot hash ok */
+#define SBK_IMAGE_STATE_LAUT	0x00000040 /* Loader authentication ok */
+#define SBK_IMAGE_STATE_LHSH	0x00000080 /* Loader hash ok */
+
+#define SBK_IMAGE_STATE_ICNF	0x00000100 /* Image confirmed */
+
+#define SBK_IMAGE_STATE_SBOK							\
+	SBK_IMAGE_STATE_IINF | SBK_IMAGE_STATE_PDEP | SBK_IMAGE_STATE_IDEP |	\
+	SBK_IMAGE_STATE_INRS | SBK_IMAGE_STATE_BAUT | SBK_IMAGE_STATE_BHSH
+
+#define SBK_IMAGE_STATE_LDOK							\
+	SBK_IMAGE_STATE_IINF | SBK_IMAGE_STATE_PDEP | SBK_IMAGE_STATE_IDEP |	\
+	SBK_IMAGE_STATE_LAUT | SBK_IMAGE_STATE_LHSH
+
+#define SBK_IMAGE_STATE_SET(flags, flag) ((flags) |= (flag))
+#define SBK_IMAGE_STATE_CLR(flags, flag) ((flags) &= ~(flag))
+#define SBK_IMAGE_STATE_ISSET(flags, flag) (((flags) & (flag)) == flag)
 
 struct sbk_slot;
 
@@ -69,7 +92,7 @@ struct __attribute__((packed)) sbk_image_dep_info {	/* image dependency */
 	uint16_t pad16;
 };
 
-struct __attribute__((packed)) sbk_product_depinfo {	/* product dependency */
+struct __attribute__((packed)) sbk_product_dep_info {	/* product dependency */
 	struct sbk_image_rec_hdr rhdr;
 	struct sbk_version_range vrange;
 	uint8_t product_hash[SBK_IMAGE_HASH_SIZE];	/* product hash */
@@ -77,21 +100,21 @@ struct __attribute__((packed)) sbk_product_depinfo {	/* product dependency */
 	uint16_t pad16;
 };
 
-struct __attribute__((packed)) sbk_image_ldrauth {	/* loader authent. */
+struct __attribute__((packed)) sbk_image_sldrauth {	/* loader authent. */
 	struct sbk_image_meta_rec_hdr rhdr;
 	uint8_t salt[SBK_IMAGE_SALT_SIZE];	/* authent./cipher salt */
 	uint8_t hmac[SBK_IMAGE_HMAC_SIZE];	/* authent. hmac */
 };
 
-struct __attribute__((packed)) sbk_image_fslauth {	/* fsl authent. */
+struct __attribute__((packed)) sbk_image_sfslauth {	/* fsl authent. */
 	struct sbk_image_meta_rec_hdr rhdr;
 	uint8_t pk_hash[SBK_IMAGE_HASH_SIZE];	/* authent. pubkey hash */
-	uint8_t sign[SBK_IMAGE_SIG_SIZE];	/* authent. signature */
+	uint8_t sign[SBK_IMAGE_SIGN_SIZE];	/* authent. signature */
 };
 
 struct sbk_image_state {
-	uint32_t state_flags;
-	struct sbk_image_meta_image_info info;
+	uint32_t state;
+	struct sbk_image_info info;
 };
 
 struct sbk_stream_image_ctx {
@@ -100,38 +123,6 @@ struct sbk_stream_image_ctx {
 	uint8_t *sdata;
 	bool validate;
 };
-
-#define SBK_IMAGE_STATE_PDEP_SET(flags) (flags |= SBK_IMAGE_STATE_PDEP)
-#define SBK_IMAGE_STATE_IDEP_SET(flags) (flags |= SBK_IMAGE_STATE_IDEP)
-#define SBK_IMAGE_STATE_INRS_SET(flags) (flags |= SBK_IMAGE_STATE_INRS)
-#define SBK_IMAGE_STATE_ICONF_SET(flags) (flags |= SBK_IMAGE_STATE_ICONF)
-#define SBK_IMAGE_STATE_SCONF_SET(flags) (flags |= SBK_IMAGE_STATE_SCONF)
-
-#define SBK_IMAGE_STATE_PDEP_CLR(flags) (flags &= ~SBK_IMAGE_STATE_PDEP)
-#define SBK_IMAGE_STATE_IDEP_CLR(flags) (flags &= ~SBK_IMAGE_STATE_IDEP)
-#define SBK_IMAGE_STATE_INRS_CLR(flags) (flags &= ~SBK_IMAGE_STATE_INRS)
-#define SBK_IMAGE_STATE_ICONF_CLR(flags) (flags &= ~SBK_IMAGE_STATE_ICONF)
-#define SBK_IMAGE_STATE_SCONF_CLR(flags) (flags &= ~SBK_IMAGE_STATE_SCONF)
-
-#define SBK_IMAGE_STATE_COND_IS_SET(flags, CONDITION)				\
-	(((flags) & (CONDITION)) == (CONDITION))
-#define SBK_IMAGE_STATE_PDEP_IS_SET(flags)					\
-	SBK_IMAGE_STATE_COND_IS_SET(flags, SBK_IMAGE_STATE_PDEP)
-#define SBK_IMAGE_STATE_IDEP_IS_SET(flags)					\
-	SBK_IMAGE_STATE_COND_IS_SET(flags, SBK_IMAGE_STATE_IDEP)
-#define SBK_IMAGE_STATE_INRS_IS_SET(flags)					\
-	SBK_IMAGE_STATE_COND_IS_SET(flags, SBK_IMAGE_STATE_INRS)
-#define SBK_IMAGE_STATE_ICONF_IS_SET(flags)					\
-	SBK_IMAGE_STATE_COND_IS_SET(flags, SBK_IMAGE_STATE_ICONF)
-#define SBK_IMAGE_STATE_SCONF_IS_SET(flags)					\
-	SBK_IMAGE_STATE_COND_IS_SET(flags, SBK_IMAGE_STATE_SCONF)
-
-#define SBK_IMAGE_STATE_CLR_FLAGS(flags) flags = 0U
-
-#define SBK_IMAGE_STATE_IS_RUNNABLE(flags)					\
-	SBK_IMAGE_STATE_COND_IS_SET(                                            \
-		flags, (SBK_IMAGE_STATE_PDEP | SBK_IMAGE_STATE_IDEP |           \
-			SBK_IMAGE_STATE_INRS))
 
 /**
  * @brief sbk_image_read

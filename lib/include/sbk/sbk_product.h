@@ -25,6 +25,16 @@ struct __attribute__((packed)) sbk_version_range {
         struct sbk_version max_version;
 };
 
+struct sbk_product {
+	char *name;
+	size_t name_size;
+        struct sbk_version *version;
+};
+
+void sbk_set_product(const struct sbk_product *product);
+
+struct sbk_product *sbk_get_product(void);
+
 /**
  * @brief sbk_version_in_range
  *
@@ -37,60 +47,6 @@ struct __attribute__((packed)) sbk_version_range {
 bool sbk_version_in_range(const struct sbk_version *ver,
                           const struct sbk_version_range *range);
 
-/**
- * @brief sbk_product_get_hash
- *
- * Get the product hash
- */
-const uint32_t *sbk_product_get_hash(void);
-
-/**
- * @brief sbk_product_get_version
- *
- * Get the product version
- */
-const struct sbk_version *sbk_product_get_version(void);
-
-/**
- * @brief sbk_product_hash_match
- *
- * Check if product_hash matched supplied hash
- *
- * @param hash: hash to check
- * @retval: true if product hash matches hash, false otherwise
- */
-bool sbk_product_hash_match(const uint32_t *hash);
-
-/**
- * @brief sbk_product_version_in_range
- *
- * Check if product version is inside supplied range
- *
- * @param range: range to check
- * @retval: true if product version is inside range, false otherwise
- */
-bool sbk_product_version_in_range(const struct sbk_version_range *range);
-
-/**
- * @brief sbk_product_init_hash
- *
- * set the product hash pointer
- */
-void sbk_product_init_hash(const uint32_t *hash);
-
-/**
- * @brief sbk_product_init_version
- *
- * Set the product version
- */
-void sbk_product_init_version(const struct sbk_version *board_version);
-
-/**
- * @brief sbk_product_djb2_hash
- *
- * Calculate the product hash (djb2)
- */
-uint32_t sbk_product_djb2_hash(const uint8_t *buf, size_t len);
 
 #ifdef __cplusplus
 }

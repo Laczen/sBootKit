@@ -10,7 +10,7 @@
 #include "sbk/sbk_slot.h"
 #include "sbk/sbk_image.h"
 #include "sbk/sbk_log.h"
-#include "private_key.h"
+#include "sbk/sbk_keys.h"
 
 struct sbk_image_record_info {
 	uint32_t pos;
@@ -76,12 +76,37 @@ end:
 	return rc;
 }
 
+static int sbk_crypto_mem_read(const void *ctx, uint32_t off, void *data,
+				 size_t len)
+{
+	const uint8_t *src = (const uint8_t *)ctx;
+
+	memcpy(src, data, len);
+	return 0;
+}
+
 static bool sbk_image_product_dependency_ok(const struct sbk_slot *slot,
 					    const struct sbk_image_info *info)
 {
+	const struct sbk_product *product = sbk_get_product();
 	uint16_t tag = info->product_dep_tag;
 	uint32_t dcnt = 0U, mcnt = 0U;
 	bool rv = false;
+
+	if (product == NULL) {
+		rv = true;
+		goto end;
+	}
+
+	const struct sbk_crypto_read_ctx read_ctx = {
+		.read = sbk_crypto_mem_read,
+		.ctx = (void *)&product->name[0],
+	};
+	const struct sbk_crypto_hash_ctx hash_ctx = {
+		.hash = (void *)&pdi.phash[0],
+		.hash_size = SBK_IMAGE_HASH_SIZE,
+	};
+	const size_t pnsize = product->name_size;
 
 	while (true) {
 		struct sbk_product_dep_info pdi;
@@ -93,11 +118,9 @@ static bool sbk_image_product_dependency_ok(const struct sbk_slot *slot,
 
 		dcnt++;
 		tag = pdi.next_tag;
-		product_hash = pdi.product_hash;
 
-		if (!sbk_product_hash_match(&product_hash)) {
+		if (sbk_crypto_hash_vrfy(&hash_ctx, &read_ctx, pnsize) != 0) {
 			continue;
-		}
 
 		struct sbk_version_range range = pdi.vrange;
 		if (!sbk_product_version_in_range(&range)) {
@@ -269,11 +292,16 @@ void sbk_image_init_state(const struct sbk_slot *slot,
 static void sbk_image_get_hmac_key(const uint8_t *salt, size_t salt_size,
 				   uint8_t *otk, size_t otk_size)
 {
-	const uint8_t private_key[] = SBK_PRIVATE_KEY;
 	const uint8_t context[] = SBK_IMAGE_HMAC_CONTEXT;
+	const struct sbk_key *privkey = sbk_get_private_key();
+
+	if (privkey == NULL) {
+		return;
+	}
+
 	const struct sbk_crypto_kxch_ctx kxch_ctx = {
-		.pkey = private_key,
-		.pkey_size = sizeof(private_key) - 1,
+		.pkey = privkey->key,
+		.pkey_size = privkey->key_size,
 		.salt = salt,
 		.salt_size = salt_size,
 		.context = context,
@@ -288,11 +316,16 @@ static void sbk_image_get_hmac_key(const uint8_t *salt, size_t salt_size,
 static void sbk_image_get_ciph_key(const uint8_t *salt, size_t salt_size,
 				   uint8_t *otk, otk_size)
 {
-	const uint8_t private_key[] = SBK_PRIVATE_KEY;
 	const uint8_t context[] = SBK_IMAGE_CIPH_CONTEXT;
+	const struct sbk_key *privkey = sbk_get_private_key();
+
+	if (privkey == NULL) {
+		return;
+	}
+
 	const struct sbk_crypto_kxch_ctx kxch_ctx = {
-		.pkey = private_key,
-		.pkey_size = sizeof(private_key) - 1,
+		.pkey = privkey->key,
+		.pkey_size = privkey->key_size,
 		.salt = salt,
 		.salt_size = salt_size,
 		.context = context,
@@ -406,15 +439,6 @@ end:
 	return rv;
 }
 
-static int sbk_crypto_mem_read(const void *ctx, uint32_t off, void *data,
-				 size_t len)
-{
-	const uint8_t *src = (const uint8_t *)ctx;
-
-	memcpy(src, data, len);
-	return 0;
-}
-
 static bool sbk_image_sfsl_pubkey_ok(const struct sbk_image_sfsl_auth *auth,
 				     const uint8_t *pubkey, size_t pksize)
 {
@@ -437,8 +461,8 @@ static bool sbk_image_sfsl_pubkey_ok(const struct sbk_image_sfsl_auth *auth,
 
 bool sbk_image_sfsl_auth_ok(const struct sbk_slot *slot)
 {
+	const struct sbk_key *pubkey = sbk_get_public_key();
 	const uint16_t tag = SBK_IMAGE_SFSL_TAG;
-	const uint8_t pubkeys[] = SBK_PUBLIC_KEY;
 	const size_t pksz = SBK_IMAGE_PUBK_SIZE;
 	struct sbk_image_sfsl_auth auth;
 	size_t idx = 0U;
@@ -448,12 +472,16 @@ bool sbk_image_sfsl_auth_ok(const struct sbk_slot *slot)
 		goto end;
 	}
 
-	while ((!sbk_image_sfsl_pubkey_ok(&auth, &pubkeys[idx], pksz)) &&
-	       (idx < (sizeof(pubkeys) - 1))) {
+	if (pubkey == NULL) {
+		goto end;
+	}
+
+	while ((!sbk_image_sfsl_pubkey_ok(&auth, pubkey->key + idx, pksz)) &&
+	       (idx < pubkey->key_size)) {
 		idx += pksz;
 	}
 
-	if (idx == (sizeof(pubkeys) - 1)) {
+	if (idx == pubkey->key_size) {
 		goto end;
 	}
 

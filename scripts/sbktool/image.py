@@ -107,6 +107,7 @@ class Image():
 
         self.payload = bytearray(self.payload)
         self.hash = sbktcrypto.sha256(self.payload[self.hdrsize:])
+        self.chash = self.hash
         self.check()
 
     def save(self, path):
@@ -191,20 +192,20 @@ class Image():
             'HH' +  # rec_tag + rec_len
             'BBH' + # minimum version
             'BBH' + # maximum version
-            'I' +   # product hash (djb2)
+            '32s' + # product hash
             'H' +   # next product dependency tag
             'H'     # pad16
         )
 
         n = 0
         for product_dep in self.product_dep:
-            product_hash = product_dep[0]
+            phash = sbktcrypto.sha256(product_dep[0])
             vrange = product_dep[1]
             info += struct.pack(product_dep_fmt,
                 product_dep_tag[n], struct.calcsize(product_dep_fmt),
                 vrange[0].major, vrange[0].minor, vrange[0].revision,
                 vrange[1].major, vrange[1].minor, vrange[1].revision,
-                product_hash,
+                phash,
                 product_dep_tag[n + 1],
                 0
             )
@@ -215,10 +216,12 @@ class Image():
         sldr_meta_fmt = (e +
             'HH' +  # rec_tag + rec_len
             '16s' +    # salt
+            '32s' +    # chash
             '32s'      # hmac
         )
 
         sldr_hmac = sldr_key.rpk_sign(self.salt, SBK_IMAGE_HMAC_CONTEXT, info)
+        sldr_chash =
         info += struct.pack(sldr_meta_fmt,
             SBK_IMAGE_SLDR_TAG, struct.calcsize(sldr_meta_fmt),
             self.salt,
@@ -259,8 +262,9 @@ class Image():
         if confirm:
             self.flags |= SBK_IMAGE_FLAG_CONFIRMED
 
-        self.add_meta(sldrkey, sfslkey)
-
         if encrypt:
             self.payload[self.hdrsize:]=sldrkey.rpk_encrypt(self.salt,
                 SBK_IMAGE_CIPH_CONTEXT, self.payload[self.hdrsize:])
+            self.chash = sbktcrypto.sha256(self.payload[self.hdrsize:])
+
+        self.add_meta(sldrkey, sfslkey)

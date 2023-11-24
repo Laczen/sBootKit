@@ -89,27 +89,17 @@ def validate_version_range(value):
             raise ValueError(e)
     return rv
 
-def djb2_hash(s):
-    hash = 5381
-    for x in s:
-        # ord(x) simply returns the unicode rep of the
-        # character x
-        hash = (( hash << 5) + hash) + ord(x)
-        hash = hash & 0xFFFFFFFF
-    return hash
-
 def convert_product_dep(ctx, param, value):
     # a product is specified as: "product:min_ver-max_ver"
     rv = []
     for entry in value:
         [product, range] = entry.split(":", 1)
-        product_hash = djb2_hash(product)
         try:
             range = validate_version_range(range)
         except ValueError as e:
             raise click.BadParameter("Bad range {}".format(e))
 
-        rv.append((product_hash, range))
+        rv.append((product, range))
 
     return rv
 

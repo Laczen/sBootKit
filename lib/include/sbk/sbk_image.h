@@ -95,7 +95,7 @@ struct __attribute__((packed)) sbk_image_dep_info {	/* image dependency */
 struct __attribute__((packed)) sbk_product_dep_info {	/* product dependency */
 	struct sbk_image_rec_hdr rhdr;
 	struct sbk_version_range vrange;
-	uint8_t product_hash[SBK_IMAGE_HASH_SIZE];	/* product hash */
+	uint8_t phash[SBK_IMAGE_HASH_SIZE];	/* product hash */
 	uint16_t next_tag;
 	uint16_t pad16;
 };
@@ -103,6 +103,7 @@ struct __attribute__((packed)) sbk_product_dep_info {	/* product dependency */
 struct __attribute__((packed)) sbk_image_sldrauth {	/* loader authent. */
 	struct sbk_image_meta_rec_hdr rhdr;
 	uint8_t salt[SBK_IMAGE_SALT_SIZE];	/* authent./cipher salt */
+	uint8_t chash[SBK_IMAGE_HASH_SIZE];	/* ciphered image hash */
 	uint8_t hmac[SBK_IMAGE_HMAC_SIZE];	/* authent. hmac */
 };
 

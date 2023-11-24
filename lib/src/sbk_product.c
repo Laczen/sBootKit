@@ -7,9 +7,6 @@
 
 #include <string.h>
 
-uint32_t *product_hash_ptr;
-struct sbk_version *product_version_ptr;
-
 static uint32_t sbk_version_u32(const struct sbk_version *ver)
 {
         return (uint32_t)((ver->major << 24) + (ver->minor << 16) +
@@ -33,51 +30,14 @@ bool sbk_version_in_range(const struct sbk_version *ver,
         return true;
 }
 
-const struct sbk_version *sbk_product_get_version(void)
+static struct sbk_product *sbk_product = NULL;
+
+void sbk_set_product(const struct sbk_product *product)
 {
-        return product_version_ptr;
+        sbk_product = product;
 }
 
-const uint32_t *sbk_product_get_hash(void)
+struct sbk_product *sbk_get_product(void)
 {
-        return product_hash_ptr;
-}
-
-bool sbk_product_hash_match(const uint32_t *hash)
-{
-        if (product_hash_ptr == NULL) {
-                return false;
-        }
-
-        return ((*hash) == (*product_hash_ptr));
-}
-
-bool sbk_product_version_in_range(const struct sbk_version_range *range)
-{
-        if (product_version_ptr == NULL) {
-                return false;
-        }
-
-        return sbk_version_in_range(product_version_ptr, range);
-}
-
-void sbk_product_init_hash(const uint32_t *hash)
-{
-        product_hash_ptr = (uint32_t *)hash;
-}
-
-void sbk_product_init_version(const struct sbk_version *dev_version)
-{
-        product_version_ptr = (struct sbk_version *)dev_version;
-}
-
-uint32_t sbk_product_djb2_hash(const uint8_t *buf, size_t len)
-{
-    uint32_t hash = 5381;
-
-    for (size_t i = 0; i < len; i++) {
-        hash = hash * 33 + buf[i];
-    }
-
-    return hash;
+        return sbk_product;
 }

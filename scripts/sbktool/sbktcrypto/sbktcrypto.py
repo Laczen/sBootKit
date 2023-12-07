@@ -107,9 +107,13 @@ class SBKTCrypto(object):
         signer = DSS.new(self.key, 'deterministic-rfc6979')
         return signer.sign(h)
 
-    def p256_pubkeyhash(self):
+    def p256_pubkey(self):
         kdata = self.key.public_key().export_key(format='raw')
         # drop the first element as this is a indication of the key type
         # (public key raw data: x04)
-        h = SHA256.new(kdata[1:])
+        return kdata[1:]
+
+    def p256_pubkeyhash(self):
+        kdata = self.p256_pubkey()
+        h = SHA256.new(kdata)
         return h.digest()

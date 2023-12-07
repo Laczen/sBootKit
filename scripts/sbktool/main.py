@@ -156,8 +156,10 @@ class BasedIntParamType(click.ParamType):
 @click.option('-dep','--dependency', multiple=True, type = str,
               callback = convert_image_dep,
               help = 'Image dependency, image address:version range')
-@click.option('-fk','--fslkey', metavar = 'filename', required = True,
+@click.option('-fk','--fslkey', multiple= True, metavar = 'filename', required = True,
               help = 'First stage loader authentication using the provided key')
+@click.option('-ipkh', '--inclpk', is_flag = True, 
+              help = 'include pubkey hashes in image meta data')
 @click.option('-lk','--ldrkey', metavar = 'filename', required = True,
               help = 'Loader authentication/encryption using the provided key')
 @click.option('-c','--confirm', is_flag = True, help = 'create confirmed image')
@@ -166,16 +168,22 @@ class BasedIntParamType(click.ParamType):
               help = 'generate test image as c file')
 @click.command(help='''Create a image for use with sBootKit\n
                INFILE and OUTFILE are of type hex''')
-def create(align, hdrsize, ssnr, version, product, dependency, fslkey, ldrkey,
-           confirm, encrypt, test_image, infile, outfile, endian):
-    fslkey = load_key(fslkey)
+def create(align, hdrsize, ssnr, version, product, dependency, fslkey, inclpk,
+           ldrkey, confirm, encrypt, test_image, infile, outfile, endian):
+    fslkeylist = []
+    for entry in fslkey:
+        key = load_key(entry)
+        if not key is None:
+            fslkeylist.append(key)
+
+    fslkey = fslkeylist
     ldrkey = load_key(ldrkey)
     if (fslkey is not None) and (ldrkey is not None):
         img = image.Image(hdrsize = hdrsize, version = decode_version(version),
                           product_dep = product, image_dep = dependency,
                           endian = endian, align = align, type = type)
         img.load(infile)
-        img.create(fslkey, ldrkey, confirm, encrypt)
+        img.create(fslkey, ldrkey, confirm, encrypt, inclpk)
         if outfile is not None:
             img.save(outfile)
 

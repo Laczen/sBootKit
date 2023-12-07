@@ -86,7 +86,7 @@ static int sbk_crypto_mem_read(const void *ctx, uint32_t off, void *data,
 {
 	const uint8_t *src = (const uint8_t *)ctx;
 
-	memcpy(src, data, len);
+	memcpy(data, src + off, len);
 	return 0;
 }
 
@@ -104,6 +104,7 @@ static bool sbk_image_product_dependency_ok(const struct sbk_slot *slot,
 	}
 
 	struct sbk_product_dep_info pdi;
+	const size_t pdisz = sizeof(pdi);
 	const struct sbk_crypto_read_ctx read_ctx = {
 		.read = sbk_crypto_mem_read,
 		.ctx = (void *)&product->name[0],
@@ -115,9 +116,8 @@ static bool sbk_image_product_dependency_ok(const struct sbk_slot *slot,
 	const size_t pnsize = product->name_size;
 
 	while (true) {
-		uint32_t product_hash;
-
-		if (sbk_image_get_tagdata(slot, tag, &pdi, sizeof(pdi)) != 0) {
+		if ((sbk_image_get_tagdata(slot, tag, &pdi, pdisz) != 0) ||
+		    (tag == 0U)) {
 			break;
 		}
 
@@ -128,7 +128,7 @@ static bool sbk_image_product_dependency_ok(const struct sbk_slot *slot,
 			continue;
 
 			struct sbk_version_range range = pdi.vrange;
-			if (!sbk_product_version_in_range(&range)) {
+			if (!sbk_version_in_range(product->version, &range)) {
 				continue;
 			}
 
@@ -143,6 +143,7 @@ static bool sbk_image_product_dependency_ok(const struct sbk_slot *slot,
 	rv = true;
 
 end:
+	SBK_LOG_DBG("product %s", rv ? "ok" : "nok");
 	return rv;
 }
 
@@ -185,8 +186,10 @@ static bool sbk_image_image_dependency_ok(const struct sbk_slot *slot,
 
 	while (true) {
 		struct sbk_image_dep_info idi;
+		const size_t idisz = sizeof(idi);
 
-		if (sbk_image_get_tagdata(slot, tag, &idi, sizeof(idi)) != 0) {
+		if ((sbk_image_get_tagdata(slot, tag, &idi, idisz) != 0) ||
+		    (tag == 0U)) {
 			break;
 		}
 
@@ -198,7 +201,7 @@ static bool sbk_image_image_dependency_ok(const struct sbk_slot *slot,
 		uint8_t dslot_no = 0U;
 
 		while (true) {
-			if (sbk_open_destination_slot(&dslot, dslot_no) != 0) {
+			if (sbk_open_image_slot(&dslot, dslot_no) != 0) {
 				break;
 			}
 
@@ -215,6 +218,7 @@ static bool sbk_image_image_dependency_ok(const struct sbk_slot *slot,
 		rv = true;
 	}
 
+	SBK_LOG_DBG("image %s", rv ? "dependency ok" : "dependency error");
 	return rv;
 }
 
@@ -223,8 +227,10 @@ static bool sbk_image_info_found(const struct sbk_slot *slot,
 {
 	const uint16_t tag = SBK_IMAGE_INFO_TAG;
 	const size_t isz = sizeof(struct sbk_image_info);
+	int rc = sbk_image_get_tagdata(slot, tag, info, isz);
 
-	return sbk_image_get_tagdata(slot, tag, info, sizeof(info)) == 0;
+	SBK_LOG_DBG("image info %s", rc == 0 ? "present" : "missing");
+	return rc == 0 ? true : false;
 }
 
 static bool sbk_image_local_confirmed(const struct sbk_slot *slot)
@@ -247,6 +253,7 @@ static bool sbk_image_local_confirmed(const struct sbk_slot *slot)
 	}
 
 end:
+	SBK_LOG_DBG("%s", rv ? "local confirmed" : "local unconfirmed");
 	return rv;
 }
 
@@ -261,6 +268,7 @@ static bool sbk_image_in_exe_slot(const struct sbk_slot *slot,
 		rv = true;
 	}
 
+	SBK_LOG_DBG("%s", rv ? "runnable from slot" : "can't run from slot");
 	return rv;
 }
 
@@ -268,8 +276,6 @@ void sbk_image_init_state(const struct sbk_slot *slot,
 			  struct sbk_image_state *st)
 {
 	struct sbk_image_info *info = &st->info;
-
-	SBK_IMAGE_STATE_CLR(st->state, SBK_IMAGE_STATE_FULL);
 
 	if (sbk_image_info_found(slot, info)) {
 		SBK_IMAGE_STATE_SET(st->state, SBK_IMAGE_STATE_IINF);
@@ -301,14 +307,14 @@ void sbk_image_init_state(const struct sbk_slot *slot,
 static void sbk_image_get_hmac_key(const uint8_t *salt, size_t salt_size,
 				   uint8_t *otk, size_t otk_size)
 {
-	const uint8_t context[] = SBK_IMAGE_HMAC_CONTEXT;
 	const struct sbk_key *privkey = sbk_get_private_key();
 
 	if (privkey == NULL) {
 		return;
 	}
 
-	const struct sbk_crypto_kxch_ctx kxch_ctx = {
+	uint8_t context[] = SBK_IMAGE_HMAC_CONTEXT;
+	struct sbk_crypto_kxch_ctx kxch_ctx = {
 		.pkey = privkey->key,
 		.pkey_size = privkey->key_size,
 		.salt = salt,
@@ -319,19 +325,20 @@ static void sbk_image_get_hmac_key(const uint8_t *salt, size_t salt_size,
 
 	sbk_crypto_kxch(&kxch_ctx, otk, otk_size);
 	sbk_crypto_cwipe(context, sizeof(context));
+	sbk_crypto_cwipe(&kxch_ctx, sizeof(kxch_ctx));
 }
 
 static void sbk_image_get_ciph_key(const uint8_t *salt, size_t salt_size,
 				   uint8_t *otk, size_t otk_size)
 {
-	const uint8_t context[] = SBK_IMAGE_CIPH_CONTEXT;
 	const struct sbk_key *privkey = sbk_get_private_key();
 
 	if (privkey == NULL) {
 		return;
 	}
 
-	const struct sbk_crypto_kxch_ctx kxch_ctx = {
+	uint8_t context[] = SBK_IMAGE_CIPH_CONTEXT;
+	struct sbk_crypto_kxch_ctx kxch_ctx = {
 		.pkey = privkey->key,
 		.pkey_size = privkey->key_size,
 		.salt = salt,
@@ -342,10 +349,11 @@ static void sbk_image_get_ciph_key(const uint8_t *salt, size_t salt_size,
 
 	sbk_crypto_kxch(&kxch_ctx, otk, otk_size);
 	sbk_crypto_cwipe(context, sizeof(context));
+	sbk_crypto_cwipe(&kxch_ctx, sizeof(kxch_ctx));
 }
 
 struct sbk_crypto_pslot_ctx {
-	struct sbk_slot *slot;
+	const struct sbk_slot *slot;
 	uint32_t soff;
 };
 
@@ -413,13 +421,12 @@ end:
 }
 
 static bool sbk_image_sfsl_sign_ok(const struct sbk_slot *slot,
-				   const struct sbk_image_sfsl_auth *auth,
-				   uint8_t *pubkey, size_t pubkey_size)
+				   const struct sbk_image_sfsl_auth *auth)
 {
 	const uint16_t tag = SBK_IMAGE_SFSL_TAG;
 	const struct sbk_crypto_sigp256_ctx p256_ctx = {
-		.pubkey = (void *)pubkey,
-		.pubkey_size = pubkey_size,
+		.pubkey = (void *)&auth->pubkey[0],
+		.pubkey_size = SBK_IMAGE_PUBK_SIZE,
 		.signature = (void *)&auth->sign[0],
 		.signature_size = SBK_IMAGE_SIGN_SIZE,
 	};
@@ -446,54 +453,77 @@ end:
 	return rv;
 }
 
-static bool sbk_image_sfsl_pubkey_ok(const struct sbk_image_sfsl_auth *auth,
-				     const uint8_t *pubkey, size_t pksize)
+static bool sbk_image_sfsl_pubkey_ok(const struct sbk_slot *slot,
+				     const struct sbk_image_sfsl_auth *auth)
 {
-	const struct sbk_crypto_read_ctx read_ctx = {
-		.read = sbk_crypto_mem_read,
-		.ctx = (void *)pubkey,
-	};
-	const struct sbk_crypto_hash_ctx hash_ctx = {
-		.hash = (void *)auth->pk_hash[0],
-		.hash_size = SBK_IMAGE_HASH_SIZE,
-	};
+	const uint16_t tag = SBK_IMAGE_PUBK_TAG;
+	struct sbk_image_record_info info = {.pos = 0U, .size = 0U};
+	uint8_t hash[SBK_IMAGE_HASH_SIZE];
 	bool rv = false;
 
-	if (sbk_crypto_hash_vrfy(&hash_ctx, &read_ctx, pksize) == 0) {
-		rv = true;
+	if (sbk_image_get_record_info(slot, tag, &info) != 0) {
+		goto end;
 	}
 
+	info.size -= sizeof(struct sbk_image_rec_hdr);
+	info.pos += sizeof(struct sbk_image_rec_hdr);
+
+	while (info.size != 0) {
+		const size_t hsize = SBK_IMAGE_HASH_SIZE;
+		const struct sbk_crypto_read_ctx read_ctx = {
+			.read = sbk_crypto_mem_read,
+			.ctx = (void *)&auth->pubkey[0],
+		};
+		const struct sbk_crypto_hash_ctx hash_ctx = {
+			.hash = (void *)&hash[0],
+			.hash_size = hsize,
+		};
+		const size_t pksize = SBK_IMAGE_PUBK_SIZE;
+
+		if (sbk_slot_read(slot, info.pos, hash, hsize) != 0) {
+			break;
+		}
+
+		if (sbk_crypto_hash_vrfy(&hash_ctx, &read_ctx, pksize) == 0) {
+			rv = true;
+			break;
+		}
+
+		info.size -= SBK_IMAGE_HASH_SIZE;
+		info.pos += SBK_IMAGE_HASH_SIZE;
+		if (info.size < SBK_IMAGE_HASH_SIZE) {
+			break;
+		}
+	}
+
+end:
+	SBK_LOG_DBG("pubkey %s", rv ? "valid" : "invalid");
 	return rv;
 }
 
 bool sbk_image_sfsl_auth_ok(const struct sbk_slot *slot)
 {
-	const struct sbk_key *pubkey = sbk_get_public_key();
 	const uint16_t tag = SBK_IMAGE_SFSL_TAG;
-	const size_t pksz = SBK_IMAGE_PUBK_SIZE;
 	struct sbk_image_sfsl_auth auth;
-	size_t idx = 0U;
+	struct sbk_slot sldr_slot;
 	bool rv = false;
 
 	if (sbk_image_get_tagdata(slot, tag, &auth, sizeof(auth)) != 0) {
 		goto end;
 	}
 
-	if (pubkey == NULL) {
+	if (sbk_open_sldr_slot(&sldr_slot) != 0) {
 		goto end;
 	}
 
-	while ((!sbk_image_sfsl_pubkey_ok(&auth, pubkey->key + idx, pksz)) &&
-	       (idx < pubkey->key_size)) {
-		idx += pksz;
-	}
-
-	if (idx == pubkey->key_size) {
+	if ((!sbk_image_sfsl_pubkey_ok(&sldr_slot, &auth)) &&
+	    (!sbk_image_sfsl_pubkey_ok(slot, &auth))) {
 		goto end;
 	}
 
-	rv = sbk_image_sfsl_sign_ok(slot, &auth, pubkey->key + idx, pksz);
+	rv = sbk_image_sfsl_sign_ok(slot, &auth);
 end:
+	SBK_LOG_DBG("auth %s", rv ? "valid" : "invalid");
 	return rv;
 }
 
@@ -509,7 +539,7 @@ bool sbk_image_hash_ok(const struct sbk_slot *slot,
 		.ctx = (void *)&pslot_ctx,
 	};
 	const struct sbk_crypto_hash_ctx hash_ctx = {
-		.hash = (void *)info->image_hash[0],
+		.hash = (void *)&info->image_hash[0],
 		.hash_size = SBK_IMAGE_HASH_SIZE,
 	};
 	bool rv = false;
@@ -518,6 +548,7 @@ bool sbk_image_hash_ok(const struct sbk_slot *slot,
 		rv = true;
 	}
 
+	SBK_LOG_DBG("hash %s", rv ? "valid" : "invalid");
 	return rv;
 }
 
@@ -528,9 +559,51 @@ void sbk_image_sfsl_state(const struct sbk_slot *slot,
 		SBK_IMAGE_STATE_SET(st->state, SBK_IMAGE_STATE_BAUT);
 	}
 
+	sbk_image_init_state(slot, st);
+
 	if (sbk_image_hash_ok(slot, &st->info)) {
 		SBK_IMAGE_STATE_SET(st->state, SBK_IMAGE_STATE_BHSH);
 	}
+}
+
+bool sbk_image_sfsl_sldr_needed(void)
+{
+	bool rv = false;
+
+	for (uint8_t slotnr = 0U; slotnr <= 128; slotnr++) {
+		struct sbk_slot img, upd;
+		struct sbk_image_info img_info, upd_info;
+
+		if (rv) {
+			break;
+		}
+
+		if (sbk_open_update_slot(&upd, slotnr) != 0) {
+			break;
+		}
+
+		if (!sbk_image_info_found(&upd, &upd_info)) {
+			sbk_slot_close(&upd);
+			continue;
+		}
+
+		sbk_slot_close(&upd);
+		if (sbk_open_image_slot(&img, slotnr) != 0) {
+			continue;
+		}
+
+		if ((!sbk_image_info_found(&img, &img_info)) ||
+		    (sbk_image_in_exe_slot(&img, &upd_info) &&
+		     (upd_info.image_sequence_number >
+		      img_info.image_sequence_number))) {
+			rv = true;
+		}
+
+		sbk_slot_close(&img);
+	}
+
+	SBK_LOG_DBG("%s", rv ? "Need to call sLDR" : "");
+	return rv;
 }
 
 void sbk_image_sldr_state(const struct sbk_slot *slot,
@@ -545,301 +618,301 @@ void sbk_image_sldr_state(const struct sbk_slot *slot,
 	}
 }
 
-struct sbk_boot_slot_ctx {
-	const struct sbk_slot *slt;
-	uint32_t split_pos;
-	uint32_t split_jmp;
-};
+// struct sbk_boot_slot_ctx {
+// 	const struct sbk_slot *slt;
+// 	uint32_t split_pos;
+// 	uint32_t split_jmp;
+// };
 
-int boot_slot_read(const void *ctx, uint32_t off, void *data, size_t len)
-{
-	struct sbk_boot_slot_ctx *bsctx = (struct sbk_boot_slot_ctx *)ctx;
-	uint8_t *data8 = (uint8_t *)data;
-	int rc;
+// int boot_slot_read(const void *ctx, uint32_t off, void *data, size_t len)
+// {
+// 	struct sbk_boot_slot_ctx *bsctx = (struct sbk_boot_slot_ctx *)ctx;
+// 	uint8_t *data8 = (uint8_t *)data;
+// 	int rc;
 
-	if (bsctx->split_pos == 0U) {
-		/* setup the split slot (authentication data is after
-		 * image) */
-		const size_t meta_sz = sizeof(struct sbk_image_meta);
-		struct sbk_image_record_info info = {.pos = 0U, .size = 0U};
-		struct sbk_image_meta meta;
+// 	if (bsctx->split_pos == 0U) {
+// 		/* setup the split slot (authentication data is after
+// 		 * image) */
+// 		const size_t meta_sz = sizeof(struct sbk_image_meta);
+// 		struct sbk_image_record_info info = {.pos = 0U, .size = 0U};
+// 		struct sbk_image_meta meta;
 
-		rc = sbk_image_get_record_info(bsctx->slt, SBK_IMAGE_AUTH_TAG,
-					       &info);
-		if (rc != 0) {
-			goto end;
-		}
+// 		rc = sbk_image_get_record_info(bsctx->slt, SBK_IMAGE_AUTH_TAG,
+// 					       &info);
+// 		if (rc != 0) {
+// 			goto end;
+// 		}
 
-		rc = sbk_image_get_tagdata(bsctx->slt, SBK_IMAGE_META_TAG, &meta,
-					   meta_sz);
-		if (rc != 0) {
-			goto end;
-		}
+// 		rc = sbk_image_get_tagdata(bsctx->slt, SBK_IMAGE_META_TAG, &meta,
+// 					   meta_sz);
+// 		if (rc != 0) {
+// 			goto end;
+// 		}
 
-		bsctx->split_pos = info.pos + info.size;
-		bsctx->split_jmp = meta.image_offset + meta.image_size;
-	}
+// 		bsctx->split_pos = info.pos + info.size;
+// 		bsctx->split_jmp = meta.image_offset + meta.image_size;
+// 	}
 
-	if (off < bsctx->split_pos) {
-		size_t rdlen = SBK_MIN(len, bsctx->split_pos - off);
+// 	if (off < bsctx->split_pos) {
+// 		size_t rdlen = SBK_MIN(len, bsctx->split_pos - off);
 
-		rc = sbk_slot_read(bsctx->slt, off + bsctx->split_jmp, data8,
-				   rdlen);
+// 		rc = sbk_slot_read(bsctx->slt, off + bsctx->split_jmp, data8,
+// 				   rdlen);
 
-		if (rc != 0) {
-			goto end;
-		}
+// 		if (rc != 0) {
+// 			goto end;
+// 		}
 
-		data8 += rdlen;
-		off += rdlen;
-		len -= rdlen;
-	}
+// 		data8 += rdlen;
+// 		off += rdlen;
+// 		len -= rdlen;
+// 	}
 
-	if (len != 0U) {
-		rc = sbk_slot_read(bsctx->slt, off, data8, len);
-	}
+// 	if (len != 0U) {
+// 		rc = sbk_slot_read(bsctx->slt, off, data8, len);
+// 	}
 
-end:
-	return rc;
-}
+// end:
+// 	return rc;
+// }
 
-int boot_slot_size(const void *ctx, size_t *size)
-{
-	struct sbk_boot_slot_ctx *bsctx = (struct sbk_boot_slot_ctx *)ctx;
+// int boot_slot_size(const void *ctx, size_t *size)
+// {
+// 	struct sbk_boot_slot_ctx *bsctx = (struct sbk_boot_slot_ctx *)ctx;
 
-	return sbk_slot_size(bsctx->slt, size);
-}
+// 	return sbk_slot_size(bsctx->slt, size);
+// }
 
-int boot_slot_address(const void *ctx, uint32_t *addr)
-{
-	struct sbk_boot_slot_ctx *bsctx = (struct sbk_boot_slot_ctx *)ctx;
+// int boot_slot_address(const void *ctx, uint32_t *addr)
+// {
+// 	struct sbk_boot_slot_ctx *bsctx = (struct sbk_boot_slot_ctx *)ctx;
 
-	return sbk_slot_address(bsctx->slt, addr);
-}
+// 	return sbk_slot_address(bsctx->slt, addr);
+// }
 
-bool sbk_image_can_run(const struct sbk_slot *slt, struct sbk_image_state *st)
-{
-	struct sbk_boot_slot_ctx bsctx = {
-		.slt = slt, .split_pos = 0U, .split_jmp = 0U};
-	struct sbk_slot bslt = {
-		.ctx = (void *)&bsctx,
-		.read = boot_slot_read,
-		.size = boot_slot_size,
-		.address = boot_slot_address,
-	};
-	bool rv = false;
+// bool sbk_image_can_run(const struct sbk_slot *slt, struct sbk_image_state *st)
+// {
+// 	struct sbk_boot_slot_ctx bsctx = {
+// 		.slt = slt, .split_pos = 0U, .split_jmp = 0U};
+// 	struct sbk_slot bslt = {
+// 		.ctx = (void *)&bsctx,
+// 		.read = boot_slot_read,
+// 		.size = boot_slot_size,
+// 		.address = boot_slot_address,
+// 	};
+// 	bool rv = false;
 
-	SBK_IMAGE_STATE_CLR_FLAGS(st->state_flags);
-	if (!sbk_image_is_valid(&bslt, st)) {
-		goto end;
-	}
+// 	SBK_IMAGE_STATE_CLR_FLAGS(st->state_flags);
+// 	if (!sbk_image_is_valid(&bslt, st)) {
+// 		goto end;
+// 	}
 
-	if (!SBK_IMAGE_STATE_IS_RUNNABLE(st->state_flags)) {
-		goto end;
-	}
+// 	if (!SBK_IMAGE_STATE_IS_RUNNABLE(st->state_flags)) {
+// 		goto end;
+// 	}
 
-	rv = true;
-end:
-	return rv;
-}
+// 	rv = true;
+// end:
+// 	return rv;
+// }
 
-#if CONFIG_SBK_IMAGE_AUTHENTICATE == 0
-bool sbk_image_is_authentic(const struct sbk_slot *slt)
-{
-	return true;
-}
-#else  /* todo add signature check */
-bool sbk_image_is_authentic(const struct sbk_slot *slt)
-{
-	return true;
-}
-#endif /* CONFIG_SBK_IMAGE_AUTHENTICATE */
+// #if CONFIG_SBK_IMAGE_AUTHENTICATE == 0
+// bool sbk_image_is_authentic(const struct sbk_slot *slt)
+// {
+// 	return true;
+// }
+// #else  /* todo add signature check */
+// bool sbk_image_is_authentic(const struct sbk_slot *slt)
+// {
+// 	return true;
+// }
+// #endif /* CONFIG_SBK_IMAGE_AUTHENTICATE */
 
-static bool sbk_image_can_upgrade(const struct sbk_slot *dst,
-				  const struct sbk_slot *src)
-{
-	struct sbk_image_state dst_st, src_st;
-	bool rv = false;
+// static bool sbk_image_can_upgrade(const struct sbk_slot *dst,
+// 				  const struct sbk_slot *src)
+// {
+// 	struct sbk_image_state dst_st, src_st;
+// 	bool rv = false;
 
-	SBK_IMAGE_STATE_CLR_FLAGS(dst_st.state_flags);
-	SBK_IMAGE_STATE_CLR_FLAGS(src_st.state_flags);
-	(void)sbk_image_get_state(dst, &dst_st);
+// 	SBK_IMAGE_STATE_CLR_FLAGS(dst_st.state_flags);
+// 	SBK_IMAGE_STATE_CLR_FLAGS(src_st.state_flags);
+// 	(void)sbk_image_get_state(dst, &dst_st);
 
-	if (!sbk_image_is_authentic(src)) {
-		goto end;
-	}
+// 	if (!sbk_image_is_authentic(src)) {
+// 		goto end;
+// 	}
 
-	if (!sbk_image_is_valid_header(src, &src_st)) {
-		goto end;
-	}
+// 	if (!sbk_image_is_valid_header(src, &src_st)) {
+// 		goto end;
+// 	}
 
-	if (src_st.im.image_sequence_number >= dst_st.im.image_sequence_number) {
-		rv = true;
-	}
+// 	if (src_st.im.image_sequence_number >= dst_st.im.image_sequence_number) {
+// 		rv = true;
+// 	}
 
-	if ((!rv) && (!SBK_IMAGE_STATE_ICONF_IS_SET(dst_st.state_flags))) {
-		rv = true;
-	}
+// 	if ((!rv) && (!SBK_IMAGE_STATE_ICONF_IS_SET(dst_st.state_flags))) {
+// 		rv = true;
+// 	}
 
-	if ((!rv) && (!SBK_IMAGE_STATE_SCONF_IS_SET(dst_st.state_flags))) {
-		rv = true;
-	}
+// 	if ((!rv) && (!SBK_IMAGE_STATE_SCONF_IS_SET(dst_st.state_flags))) {
+// 		rv = true;
+// 	}
 
-end:
-	return rv;
-}
+// end:
+// 	return rv;
+// }
 
-static int sbk_image_cipher(const struct sbk_image_meta *meta, uint32_t offset,
-			    void *data, size_t len)
-{
-	const size_t cbsize = sbk_crypto_cipher_block_size();
-	const size_t cssize = sbk_crypto_cipher_state_size();
-	const size_t cksize = sbk_crypto_kxch_km_size();
-	uint8_t dbuf[cbsize], cbuf[cbsize], est[cssize], otk[cksize];
-	uint8_t *data8 = (uint8_t *)data;
-	int rc;
+// static int sbk_image_cipher(const struct sbk_image_meta *meta, uint32_t
+// offset, 			    void *data, size_t len)
+// {
+// 	const size_t cbsize = sbk_crypto_cipher_block_size();
+// 	const size_t cssize = sbk_crypto_cipher_state_size();
+// 	const size_t cksize = sbk_crypto_kxch_km_size();
+// 	uint8_t dbuf[cbsize], cbuf[cbsize], est[cssize], otk[cksize];
+// 	uint8_t *data8 = (uint8_t *)data;
+// 	int rc;
 
-	if (offset < meta->image_offset) {
-		return -SBK_EC_EINVAL;
-	}
+// 	if (offset < meta->image_offset) {
+// 		return -SBK_EC_EINVAL;
+// 	}
 
-	sbk_image_get_ciph_key(meta, otk);
+// 	sbk_image_get_ciph_key(meta, otk);
 
-	while (len != 0U) {
-		uint32_t bcnt = (offset - meta->image_offset) / cbsize;
-		uint32_t boff = bcnt * cbsize + meta->image_offset;
+// 	while (len != 0U) {
+// 		uint32_t bcnt = (offset - meta->image_offset) / cbsize;
+// 		uint32_t boff = bcnt * cbsize + meta->image_offset;
 
-		memset(dbuf, 0, cbsize);
-		memcpy(dbuf + (offset - boff), data8, cbsize - (offset - boff));
-		sbk_crypto_cipher_init(est, otk, sizeof(otk), bcnt);
-		sbk_crypto_cipher(cbuf, dbuf, cbsize, est);
-		while ((len != 0U) && ((offset - boff) < cbsize)) {
-			(*data8) = cbuf[offset - boff];
-			data8++;
-			offset++;
-			len--;
-		}
-	}
+// 		memset(dbuf, 0, cbsize);
+// 		memcpy(dbuf + (offset - boff), data8, cbsize - (offset - boff));
+// 		sbk_crypto_cipher_init(est, otk, sizeof(otk), bcnt);
+// 		sbk_crypto_cipher(cbuf, dbuf, cbsize, est);
+// 		while ((len != 0U) && ((offset - boff) < cbsize)) {
+// 			(*data8) = cbuf[offset - boff];
+// 			data8++;
+// 			offset++;
+// 			len--;
+// 		}
+// 	}
 
-	sbk_crypto_cwipe(dbuf, sizeof(dbuf));
-	sbk_crypto_cwipe(cbuf, sizeof(cbuf));
-	sbk_crypto_cwipe(est, sizeof(est));
-	sbk_crypto_cwipe(otk, sizeof(otk));
-	return rc;
-}
+// 	sbk_crypto_cwipe(dbuf, sizeof(dbuf));
+// 	sbk_crypto_cwipe(cbuf, sizeof(cbuf));
+// 	sbk_crypto_cwipe(est, sizeof(est));
+// 	sbk_crypto_cwipe(otk, sizeof(otk));
+// 	return rc;
+// }
 
-int sbk_image_read(const struct sbk_slot *slot, uint32_t off, void *data,
-		   size_t len)
-{
-	uint8_t *data8 = (uint8_t *)data;
-	struct sbk_image_meta im;
-	int rc;
+// int sbk_image_read(const struct sbk_slot *slot, uint32_t off, void *data,
+// 		   size_t len)
+// {
+// 	uint8_t *data8 = (uint8_t *)data;
+// 	struct sbk_image_meta im;
+// 	int rc;
 
-	rc = sbk_image_get_tagdata(slot, SBK_IMAGE_META_TAG, &im, sizeof(im));
-	if (rc != 0) {
-		goto end;
-	}
+// 	rc = sbk_image_get_tagdata(slot, SBK_IMAGE_META_TAG, &im, sizeof(im));
+// 	if (rc != 0) {
+// 		goto end;
+// 	}
 
-	if (off < im.image_offset) {
-		size_t rdlen = SBK_MIN(len, im.image_offset - off);
-		rc = sbk_slot_read(slot, off, data8, rdlen);
-		if ((rc != 0) || (rdlen == len)) {
-			goto end;
-		}
+// 	if (off < im.image_offset) {
+// 		size_t rdlen = SBK_MIN(len, im.image_offset - off);
+// 		rc = sbk_slot_read(slot, off, data8, rdlen);
+// 		if ((rc != 0) || (rdlen == len)) {
+// 			goto end;
+// 		}
 
-		off += rdlen;
-		len -= rdlen;
-		data8 += rdlen;
-	}
+// 		off += rdlen;
+// 		len -= rdlen;
+// 		data8 += rdlen;
+// 	}
 
-	/* Limit read to image data */
-	if ((off + len) > (im.image_offset + im.image_size)) {
-		len = (im.image_offset + im.image_size - off);
-	}
+// 	/* Limit read to image data */
+// 	if ((off + len) > (im.image_offset + im.image_size)) {
+// 		len = (im.image_offset + im.image_size - off);
+// 	}
 
-	uint32_t saddr = im.image_offset;
-	if ((!SBK_IMAGE_ENCRYPTED(im.image_flags)) ||
-	    (sbk_slot_address(slot, &saddr) != 0) ||
-	    (saddr != im.image_start_address)) {
-		rc = sbk_slot_read(slot, off, data8, len);
-	} else {
-		rc = sbk_image_cipher(&im, off, data8, len);
-	}
+// 	uint32_t saddr = im.image_offset;
+// 	if ((!SBK_IMAGE_ENCRYPTED(im.image_flags)) ||
+// 	    (sbk_slot_address(slot, &saddr) != 0) ||
+// 	    (saddr != im.image_start_address)) {
+// 		rc = sbk_slot_read(slot, off, data8, len);
+// 	} else {
+// 		rc = sbk_image_cipher(&im, off, data8, len);
+// 	}
 
-end:
-	return rc;
-}
+// end:
+// 	return rc;
+// }
 
-static int stream_read(const void *ctx, uint32_t off, void *data, size_t len)
-{
-	const struct sbk_stream_image_ctx *si_ctx =
-		(const struct sbk_stream_image_ctx *)ctx;
-	uint8_t *data8 = (uint8_t *)data;
-	int rc = 0;
+// static int stream_read(const void *ctx, uint32_t off, void *data, size_t len)
+// {
+// 	const struct sbk_stream_image_ctx *si_ctx =
+// 		(const struct sbk_stream_image_ctx *)ctx;
+// 	uint8_t *data8 = (uint8_t *)data;
+// 	int rc = 0;
 
-	while ((off < si_ctx->soff) && (len != 0U)) {
-		size_t rdlen = SBK_MIN(si_ctx->soff - off, len);
-		rc = sbk_slot_read(si_ctx->slt, off, data8, rdlen);
-		if (rc != 0) {
-			goto end;
-		}
+// 	while ((off < si_ctx->soff) && (len != 0U)) {
+// 		size_t rdlen = SBK_MIN(si_ctx->soff - off, len);
+// 		rc = sbk_slot_read(si_ctx->slt, off, data8, rdlen);
+// 		if (rc != 0) {
+// 			goto end;
+// 		}
 
-		len -= rdlen;
-		off += rdlen;
-		data8 += rdlen;
-	}
+// 		len -= rdlen;
+// 		off += rdlen;
+// 		data8 += rdlen;
+// 	}
 
-	if (len != 0U) {
-		memcpy(data8, si_ctx->sdata, len);
-	}
+// 	if (len != 0U) {
+// 		memcpy(data8, si_ctx->sdata, len);
+// 	}
 
-end:
-	return rc;
-}
+// end:
+// 	return rc;
+// }
 
-int stream_address(const void *ctx, uint32_t *address)
-{
-	const struct sbk_stream_image_ctx *si_ctx =
-		(const struct sbk_stream_image_ctx *)ctx;
+// int stream_address(const void *ctx, uint32_t *address)
+// {
+// 	const struct sbk_stream_image_ctx *si_ctx =
+// 		(const struct sbk_stream_image_ctx *)ctx;
 
-	return sbk_slot_address(si_ctx->slt, address);
-}
+// 	return sbk_slot_address(si_ctx->slt, address);
+// }
 
-int sbk_stream_image_flush(struct sbk_stream_image_ctx *ctx, size_t len)
-{
-	uint8_t buf[SBK_IMAGE_WBS];
-	struct sbk_slot stream_slot = {
-		.ctx = (void *)ctx,
-		.read = stream_read,
-		.address = stream_address,
-	};
-	int rc;
+// int sbk_stream_image_flush(struct sbk_stream_image_ctx *ctx, size_t len)
+// {
+// 	uint8_t buf[SBK_IMAGE_WBS];
+// 	struct sbk_slot stream_slot = {
+// 		.ctx = (void *)ctx,
+// 		.read = stream_read,
+// 		.address = stream_address,
+// 	};
+// 	int rc;
 
-	if ((ctx->soff == 0U) && (ctx->validate) &&
-	    (!sbk_image_can_upgrade(ctx->slt, &stream_slot))) {
-		return -SBK_EC_EFAULT;
-	}
+// 	if ((ctx->soff == 0U) && (ctx->validate) &&
+// 	    (!sbk_image_can_upgrade(ctx->slt, &stream_slot))) {
+// 		return -SBK_EC_EFAULT;
+// 	}
 
-	while (len != 0) {
-		size_t rdlen = SBK_MIN(len, sizeof(buf));
+// 	while (len != 0) {
+// 		size_t rdlen = SBK_MIN(len, sizeof(buf));
 
-		rc = sbk_image_read(&stream_slot, ctx->soff, buf, rdlen);
-		if (rc != 0) {
-			goto end;
-		}
+// 		rc = sbk_image_read(&stream_slot, ctx->soff, buf, rdlen);
+// 		if (rc != 0) {
+// 			goto end;
+// 		}
 
-		rc = sbk_slot_prog(ctx->slt, ctx->soff, buf, rdlen);
-		if (rc != 0) {
-			goto end;
-		}
+// 		rc = sbk_slot_prog(ctx->slt, ctx->soff, buf, rdlen);
+// 		if (rc != 0) {
+// 			goto end;
+// 		}
 
-		ctx->soff += rdlen;
-		len -= rdlen;
-	}
+// 		ctx->soff += rdlen;
+// 		len -= rdlen;
+// 	}
 
-end:
-	return rc;
-}
+// end:
+// 	return rc;
+// }
 
 /**
  * The validation read method can be used to validate a image that is

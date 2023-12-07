@@ -7,33 +7,25 @@
 
 #include <string.h>
 
-static struct *sbk_key (*sbk_private_key_get_cb) = NULL;
-static struct *sbk_key (*sbk_public_key_get_cb) = NULL;
+static struct sbk_key *private_key = NULL;
+static struct sbk_key *public_key = NULL;
 
-void set_sbk_private_key_get(struct *sbk_key (*get)(void))
+void set_sbk_private_key(struct sbk_key *key)
 {
-        sbk_private_key_get_cb = get;
+	private_key = key;
 }
 
-void set_sbk_public_key_get(struct *sbk_key (*get)(void))
+void set_sbk_public_key(struct sbk_key *key)
 {
-        sbk_public_key_get_cb = get;
+	public_key = key;
 }
 
 struct sbk_key *sbk_get_private_key(void)
 {
-        if (sbk_private_key_get_cb == NULL) {
-                return NULL;
-        }
-
-        return sbk_private_key_get_cb();
+	return private_key;
 }
 
 struct sbk_key *sbk_get_public_key(void)
 {
-        if (sbk_public_key_get_cb == NULL) {
-                return NULL;
-        }
-
-        return sbk_public_key_get_cb();
+	return public_key;
 }

@@ -29,8 +29,8 @@ int sbk_slot_close(const struct sbk_slot *slot)
 	return slot->close(slot->ctx);
 }
 
-int sbk_slot_prog(const struct sbk_slot *slot, uint32_t off,
-		  const void *data, size_t len)
+int sbk_slot_prog(const struct sbk_slot *slot, uint32_t off, const void *data,
+		  size_t len)
 {
 	SBK_ASSERT(slot);
 

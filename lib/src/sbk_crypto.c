@@ -10,9 +10,10 @@
 
 #include "sbk/sbk_crypto.h"
 #include "sbk/sbk_util.h"
+#include "sbk/sbk_log.h"
 #include "mincrypt/crypto_sha256.h"
 #include "mincrypt/crypto_chacha20poly1305.h"
-#include "p256-m/p256-m.h"
+#include "p256-m.h"
 
 void sbk_crypto_cwipe(void *secret, size_t size)
 {
@@ -36,7 +37,7 @@ int sbk_crypto_compare(const void *s1, const void *s2, size_t len)
 }
 
 void sbk_crypto_kxch(const struct sbk_crypto_kxch_ctx *ctx, void *keymaterial,
-                     size_t keymaterial_size)
+		     size_t keymaterial_size)
 {
 	uint8_t prk[crypto_hkdf_sha256_prk_size()];
 
@@ -48,7 +49,7 @@ void sbk_crypto_kxch(const struct sbk_crypto_kxch_ctx *ctx, void *keymaterial,
 	sbk_crypto_cwipe(prk, sizeof(prk));
 }
 
-static int sbk_crypto_hmac_calc(void *hmac, void *key, size_t key_size,
+static int sbk_crypto_hmac_calc(void *hmac, const void *key, size_t key_size,
 				const struct sbk_crypto_read_ctx *read_ctx,
 				size_t msg_len)
 {
@@ -78,7 +79,7 @@ end:
 }
 
 int sbk_crypto_hmac_vrfy(const struct sbk_crypto_hmac_ctx *ctx,
-                         const struct sbk_crypto_read_ctx *read_ctx,
+			 const struct sbk_crypto_read_ctx *read_ctx,
 			 size_t msg_len)
 {
 	if (ctx->hmac_size > crypto_hmac_sha256_block_size()) {
@@ -130,7 +131,7 @@ end:
 }
 
 int sbk_crypto_hash_vrfy(const struct sbk_crypto_hash_ctx *ctx,
-                         const struct sbk_crypto_read_ctx *read_ctx,
+			 const struct sbk_crypto_read_ctx *read_ctx,
 			 size_t msg_len)
 {
 	if (ctx->hash_size > crypto_sha256_block_size()) {
@@ -152,7 +153,7 @@ end:
 }
 
 int sbk_crypto_sigp256_vrfy(const struct sbk_crypto_sigp256_ctx *ctx,
-                            const struct sbk_crypto_read_ctx *read_ctx,
+			    const struct sbk_crypto_read_ctx *read_ctx,
 			    size_t msg_len)
 {
 	if ((ctx->pubkey_size != 64) || (ctx->signature_size != 64)) {
@@ -184,11 +185,13 @@ size_t sbk_crypto_ciphered_read_km_size(void)
 }
 
 int sbk_crypto_ciphered_read(const struct sbk_crypto_ciphered_read_ctx *ctx,
-                             uint32_t off, void *data, size_t len)
+			     uint32_t off, void *data, size_t len)
 {
 	const struct sbk_crypto_read_ctx *rctx = ctx->read_ctx;
 	const size_t cbsize = crypto_chacha20_ietf_block_size();
 	const size_t cssize = crypto_chacha20_ietf_state_size();
+	const uint8_t *key = ctx->key;
+	const uint8_t *nonce = key + crypto_chacha20_ietf_key_size();
 	uint8_t dbuf[cbsize], cbuf[cbsize], est[cssize];
 	uint8_t *data8 = (uint8_t *)data;
 	int rc;
@@ -204,8 +207,8 @@ int sbk_crypto_ciphered_read(const struct sbk_crypto_ciphered_read_ctx *ctx,
 			break;
 		}
 
-		crypto_chacha20_ietf_init(est, ctx->key, ctx->key_size, bcnt);
-		sbk_crypto_cipher(cbuf, dbuf, cbsize, est);
+		crypto_chacha20_ietf_init(est, key, nonce, bcnt);
+		crypto_chacha20_ietf_xor(cbuf, dbuf, cbsize, est);
 		sbk_crypto_cwipe(est, sizeof(est));
 
 		while ((len != 0U) && ((off - boff) < cbsize)) {

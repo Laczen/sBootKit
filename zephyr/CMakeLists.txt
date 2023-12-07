@@ -20,7 +20,7 @@ set(MINCRYPT_DIR "${ROOT_DIR}/ext/mincrypt")
 assert_exists(MINCRYPT_DIR)
 # Path to p256-m library source subdirectory of root.
 set(P256M_DIR "${ROOT_DIR}/ext/p256-m")
-assert_exists(MINCRYPT_DIR)
+assert_exists(P256M_DIR)
 
 if(CONFIG_SBK)
 
@@ -30,11 +30,13 @@ zephyr_include_directories(
 )
 zephyr_library_sources(
     ${SBOOTKIT_DIR}/src/sbk_product.c
+    ${SBOOTKIT_DIR}/src/sbk_keys.c
     ${SBOOTKIT_DIR}/src/sbk_crypto.c
     ${SBOOTKIT_DIR}/src/sbk_image.c
     ${SBOOTKIT_DIR}/src/sbk_slot.c
     ${SBOOTKIT_DIR}/src/sbk_util.c
     ${SBOOTKIT_DIR}/src/sbk_shell.c
+
 )
 
 zephyr_include_directories_ifdef(CONFIG_SBK_MINCRYPT
@@ -46,12 +48,11 @@ zephyr_library_sources_ifdef(CONFIG_SBK_MINCRYPT
 )
 
 zephyr_include_directories_ifdef(CONFIG_SBK_P256M
-    ${P256MDIR}
+    ${P256M_DIR}
 )
 zephyr_library_sources_ifdef(CONFIG_SBK_P256M
-    ${P256MDIR}/p256-m.c
+    ${P256M_DIR}/p256-m.c
 )
-
 
 zephyr_compile_definitions(CONFIG_SBK_UTIL_INCLUDE=zephyr_util.h)
 

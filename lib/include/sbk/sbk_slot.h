@@ -105,12 +105,12 @@ int sbk_slot_address(const struct sbk_slot *slot, uint32_t *address);
  *
  */
 
-extern int sbk_open_bootable_slot(struct sbk_slot *slot, unsigned char idx);
-extern int sbk_open_destination_slot(struct sbk_slot *slot, unsigned char idx);
-extern int sbk_open_upload_slot(struct sbk_slot *slot, unsigned char idx);
+extern int sbk_open_sldr_slot(struct sbk_slot *slot);
+extern int sbk_open_image_slot(struct sbk_slot *slot, unsigned char idx);
+extern int sbk_open_rimage_slot(struct sbk_slot *slot, unsigned char idx);
+extern int sbk_open_update_slot(struct sbk_slot *slot, unsigned char idx);
 extern int sbk_open_backup_slot(struct sbk_slot *slot, unsigned char idx);
 extern int sbk_open_shareddata_slot(struct sbk_slot *slot, unsigned char idx);
-extern int sbk_open_key_slot(struct sbk_slot *slot, unsigned char idx);
 
 #ifdef __cplusplus
 } /* extern "C" */

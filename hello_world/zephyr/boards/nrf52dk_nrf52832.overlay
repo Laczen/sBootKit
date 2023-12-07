@@ -9,11 +9,7 @@
 /delete-node/ &slot1_partition;
 /delete-node/ &storage_partition;
 
-/ {
-	chosen {
-		zephyr,code-partition = &slot0_partition;
-	};
-};
+#include "../app.overlay"
 
 &flash0 {
 	partitions {
@@ -26,30 +22,31 @@
 			reg = <0x00000000 0x00002000>;
 		};
 
-		storage_partition: partition@2000 {
+		sldr_partition: partition@2000 {
+			label = "sLDR";
+			reg = <0x00002000 0x00004000>;
+		};
+
+		storage_partition: partition@6000 {
 			label = "storage";
-			reg = <0x00002000 0x00005000>;
+			reg = <0x00006000 0x00005000>;
 		};
 
-		slot0_partition: partition@7000 {
-			label = "image";
-			reg = <0x00007000 0x00014000>;
+		image0_partition: partition@11000 {
+			label = "image0";
+			reg = <0x000011000 0x00037000>;
 		};
 
-		slot0tmp_partition: partition@8000 {
-			label = "tmp";
-			reg = <0x00008000 0x00014000>;
+		update0_partition: partition@49000 {
+			label = "update0";
+			reg = <0x00049000 0x00037000>;
 		};
 
-		slot0upd_partition: partition@1C000 {
-			label = "upd";
-			reg = <0x0001C000 0x00014000>;
+		backup0_partition: partition@48000 {
+			label = "backup0";
+			reg = <0x00048000 0x00037000>;
 		};
 
-		slot1_partition: partition@30000 {
-			label = "loader";
-			reg = <0x00030000 0x00010000>;
-		};
 	};
 };
 
@@ -66,5 +63,6 @@
 	};
 };
 
-
-
+&sram0 {
+	reg = <0x20000000 0xFFE0>;
+};

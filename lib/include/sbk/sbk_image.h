@@ -16,8 +16,9 @@ extern "C" {
 #define SBK_IMAGE_WBS 64
 
 #define SBK_IMAGE_INFO_TAG 0x8000
-#define SBK_IMAGE_SLDR_TAG 0x80FE
-#define SBK_IMAGE_SFSL_TAG 0x80FF
+#define SBK_IMAGE_SFSL_TAG 0x80FD
+#define SBK_IMAGE_PUBK_TAG 0x80FE
+#define SBK_IMAGE_SLDR_TAG 0x80FF
 
 #define SBK_IMAGE_FLAG_CONF   0x00000001 /* Confirmed image */
 #define SBK_IMAGE_FLAG_CIPH   0x00000010 /* Ciphered image */
@@ -34,7 +35,7 @@ extern "C" {
 #define SBK_IMAGE_SIGN_SIZE 64 /* Signature size */
 #define SBK_IMAGE_PUBK_SIZE 64 /* Public key size */
 
-#define SBK_IMAGE_FLAG_ISSET(flags, flag) (((flags) & (flag)) == flag)
+#define SBK_IMAGE_FLAG_ISSET(state, flag) (((state) & (flag)) == flag)
 
 #define SBK_IMAGE_STATE_SCONF_MAGIC "CONF"
 
@@ -52,17 +53,16 @@ extern "C" {
 #define SBK_IMAGE_STATE_ICNF 0x00000100 /* Image confirmed */
 
 #define SBK_IMAGE_STATE_SBOK                                                    \
-	SBK_IMAGE_STATE_IINF | SBK_IMAGE_STATE_PDEP | SBK_IMAGE_STATE_IDEP |    \
-		SBK_IMAGE_STATE_INRS | SBK_IMAGE_STATE_BAUT |                   \
-		SBK_IMAGE_STATE_BHSH
+	(SBK_IMAGE_STATE_IINF | SBK_IMAGE_STATE_PDEP | SBK_IMAGE_STATE_IDEP |   \
+	 SBK_IMAGE_STATE_INRS | SBK_IMAGE_STATE_BAUT | SBK_IMAGE_STATE_BHSH)
 
 #define SBK_IMAGE_STATE_LDOK                                                    \
-	SBK_IMAGE_STATE_IINF | SBK_IMAGE_STATE_PDEP | SBK_IMAGE_STATE_IDEP |    \
-		SBK_IMAGE_STATE_LAUT | SBK_IMAGE_STATE_LHSH
+	(SBK_IMAGE_STATE_IINF | SBK_IMAGE_STATE_PDEP | SBK_IMAGE_STATE_IDEP |   \
+	 SBK_IMAGE_STATE_LAUT | SBK_IMAGE_STATE_LHSH)
 
-#define SBK_IMAGE_STATE_SET(flags, flag)   ((flags) |= (flag))
-#define SBK_IMAGE_STATE_CLR(flags, flag)   ((flags) &= ~(flag))
-#define SBK_IMAGE_STATE_ISSET(flags, flag) (((flags) & (flag)) == flag)
+#define SBK_IMAGE_STATE_SET(state, flag)   ((state) |= (flag))
+#define SBK_IMAGE_STATE_CLR(state, flag)   ((state) &= ~(flag))
+#define SBK_IMAGE_STATE_ISSET(state, flag) (((state) & (flag)) == flag)
 
 struct sbk_slot;
 
@@ -101,6 +101,19 @@ struct __attribute__((packed)) sbk_product_dep_info { /* product dependency */
 	uint16_t pad16;
 };
 
+struct __attribute__((packed)) sbk_image_sfsl_auth { /* fsl authent. */
+	struct sbk_image_rec_hdr rhdr;
+	uint8_t pubkey[SBK_IMAGE_PUBK_SIZE]; /* authent. pubkey */
+	uint8_t sign[SBK_IMAGE_SIGN_SIZE];   /* authent. signature */
+};
+struct __attribute__((packed)) sbk_image_sfsl_pkhash {
+	/* sfsl pubkey hashes (optional): any pubkey that has a hash that
+	 * matches one of the listed hashes in considered a valid pubkey.
+	 */
+	struct sbk_image_rec_hdr rhdr;
+	uint8_t pkhash[];
+};
+
 struct __attribute__((packed)) sbk_image_sldr_auth { /* loader authent. */
 	struct sbk_image_rec_hdr rhdr;
 	uint8_t salt[SBK_IMAGE_SALT_SIZE];  /* authent./cipher salt */
@@ -108,93 +121,102 @@ struct __attribute__((packed)) sbk_image_sldr_auth { /* loader authent. */
 	uint8_t hmac[SBK_IMAGE_HMAC_SIZE];  /* authent. hmac */
 };
 
-struct __attribute__((packed)) sbk_image_sfsl_auth { /* fsl authent. */
-	struct sbk_image_rec_hdr rhdr;
-	uint8_t pk_hash[SBK_IMAGE_HASH_SIZE]; /* authent. pubkey hash */
-	uint8_t sign[SBK_IMAGE_SIGN_SIZE];    /* authent. signature */
-};
-
 struct sbk_image_state {
 	uint32_t state;
 	struct sbk_image_info info;
 };
 
-struct sbk_stream_image_ctx {
-	struct sbk_slot *slt;
-	uint32_t soff;
-	uint8_t *sdata;
-	bool validate;
-};
+bool sbk_image_sfsl_sldr_needed(void);
 
 /**
- * @brief sbk_image_read
+ * @brief sbk_image_sfsl_state
  *
- * Read data from an image in a slot, this will encrypt the data when the
- * reading is done from a slot where the image can be executed from. As this
- * uses the update key it should only be used in a context where this key is
- * known (e.g. when running as updater).
+ * Retrieve the secure first stage loader state of an image in a slot
  *
- * @param slot: pointer to slot where the image resides
- * @return -ERRNO errno code if error, 0 if succesfull
- */
-int sbk_image_read(const struct sbk_slot *slot, uint32_t offset, void *data,
-		   size_t len);
-
-/**
- * @brief sbk_image_get_version
- *
- * Get the version of an image in a slot
- *
- * @param slot: pointer to slot where the image resides
- * @param version: returns the version as sbk_version
- * @return -ERRNO errno code if error, 0 if succesfull
- */
-int sbk_image_get_version(const struct sbk_slot *slot,
-			  struct sbk_version *version);
-
-/**
- * @brief sbk_image_get_length
- *
- * Get the length (header + image) of an image in a slot
- *
- * @param slot: pointer to slot where the image resides
- * @param length: returns the length
- * @return -ERRNO errno code if error, 0 if succesfull
- */
-int sbk_image_get_length(const struct sbk_slot *slot, size_t *length);
-
-/**
- * @brief sbk_image_get_state
- *
- * Get the state of an image in a slot
- *
- * @param slot: pointer to slot where the image resides
+ * @param slot: the slot to evaluate
  * @param st: image state
- * @return -ERRNO errno code if error, 0 if succesfull
  */
-int sbk_image_get_state(const struct sbk_slot *slot, struct sbk_image_state *st);
+void sbk_image_sfsl_state(const struct sbk_slot *slot,
+			  struct sbk_image_state *st);
 
-/**
- * @brief sbk_image_can_run
- *
- * Verifies that an image in slot slt can be started, returns the image state
- * @param slt
- * @param st
- * @return true
- * @return false
- */
-bool sbk_image_can_run(const struct sbk_slot *slt, struct sbk_image_state *st);
+// struct sbk_stream_image_ctx {
+// 	struct sbk_slot *slt;
+// 	uint32_t soff;
+// 	uint8_t *sdata;
+// 	bool validate;
+// };
 
-/**
- * @brief sbk_stream_image_flush
- *
- * Flush the data that is in the buffer of a stream image to a slot.
- *
- * @param ctx: pointer to stream image context
- * @param len: size of data to flush
- * @return -ERRNO errno code if error, 0 if succesfull
- */
-int sbk_stream_image_flush(struct sbk_stream_image_ctx *ctx, size_t len);
+// /**
+//  * @brief sbk_image_read
+//  *
+//  * Read data from an image in a slot, this will encrypt the data when the
+//  * reading is done from a slot where the image can be executed from. As this
+//  * uses the update key it should only be used in a context where this key is
+//  * known (e.g. when running as updater).
+//  *
+//  * @param slot: pointer to slot where the image resides
+//  * @return -ERRNO errno code if error, 0 if succesfull
+//  */
+// int sbk_image_read(const struct sbk_slot *slot, uint32_t offset, void *data,
+// 		   size_t len);
+
+// /**
+//  * @brief sbk_image_get_version
+//  *
+//  * Get the version of an image in a slot
+//  *
+//  * @param slot: pointer to slot where the image resides
+//  * @param version: returns the version as sbk_version
+//  * @return -ERRNO errno code if error, 0 if succesfull
+//  */
+// int sbk_image_get_version(const struct sbk_slot *slot,
+// 			  struct sbk_version *version);
+
+// /**
+//  * @brief sbk_image_get_length
+//  *
+//  * Get the length (header + image) of an image in a slot
+//  *
+//  * @param slot: pointer to slot where the image resides
+//  * @param length: returns the length
+//  * @return -ERRNO errno code if error, 0 if succesfull
+//  */
+// int sbk_image_get_length(const struct sbk_slot *slot, size_t *length);
+
+// /**
+//  * @brief sbk_image_get_state
+//  *
+//  * Get the state of an image in a slot
+//  *
+//  * @param slot: pointer to slot where the image resides
+//  * @param st: image state
+//  * @return -ERRNO errno code if error, 0 if succesfull
+//  */
+// int sbk_image_get_state(const struct sbk_slot *slot, struct sbk_image_state
+// *st);
+
+// /**
+//  * @brief sbk_image_can_run
+//  *
+//  * Verifies that an image in slot slt can be started, returns the image state
+//  * @param slt
+//  * @param st
+//  * @return true
+//  * @return false
+//  */
+// bool sbk_image_can_run(const struct sbk_slot *slt, struct sbk_image_state
+// *st);
+
+// /**
+//  * @brief sbk_stream_image_flush
+//  *
+//  * Flush the data that is in the buffer of a stream image to a slot.
+//  *
+//  * @param ctx: pointer to stream image context
+//  * @param len: size of data to flush
+//  * @return -ERRNO errno code if error, 0 if succesfull
+//  */
+// int sbk_stream_image_flush(struct sbk_stream_image_ctx *ctx, size_t len);
 
 #ifdef __cplusplus
 }

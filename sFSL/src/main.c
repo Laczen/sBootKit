@@ -27,84 +27,97 @@
 #define CONFIG_PVER_REV 0
 #endif
 
-/**
- * @brief shared data format definition
- */
-struct sbk_shared_data {
-	uint32_t product_hash;
-	struct sbk_version product_ver;
-	uint8_t bslot;
-	uint8_t bcnt;
-	uint8_t mode;
-	uint8_t crc8;
+static struct sbk_version product_version = {
+	.major = CONFIG_PVER_MAJ,
+	.minor = CONFIG_PVER_MIN,
+	.revision = CONFIG_PVER_REV,
 };
 
-static struct sbk_shared_data shared_data = {
-	.product_ver.major = CONFIG_PVER_MAJ,
-	.product_ver.minor = CONFIG_PVER_MIN,
-	.product_ver.revision = CONFIG_PVER_REV,
-	.bslot = 0U,
-	.bcnt = 0U,
+static struct sbk_product product = {
+	.name = CONFIG_PNAME,
+	.name_size = sizeof(CONFIG_PNAME) - 1,
+	.version = &product_version,
 };
 
 #define BOOT_RETRIES 4
 
-int main(void)
+bool get_booteable_image(struct sbk_image_state *st)
 {
-	SBK_LOG_DBG("Welcome...");
-
-	shared_data.product_hash =
-		sbk_product_djb2_hash(CONFIG_PNAME, sizeof(CONFIG_PNAME));
-	sbk_product_init_hash(&shared_data.product_hash);
-	sbk_product_init_version(&shared_data.product_ver);
-
 	struct sbk_slot slot;
-	uint8_t start_slot;
+	struct sbk_image_state walk;
+	bool rv = false;
 
-	start_slot = shared_data.bslot;
-	if (shared_data.bcnt == BOOT_RETRIES) {
-		shared_data.bslot++;
-		shared_data.bcnt = 0U;
-	}
+	for (uint8_t slotnr = 0U; slotnr <= 128; slotnr++) {
+		if (sbk_open_rimage_slot(&slot, slotnr) != 0) {
+			break;
+		}
 
-	while (true) {
-		struct sbk_image_state st;
-		int rc;
-
-		SBK_LOG_DBG("Testing slot %d", shared_data.bslot);
-		rc = sbk_open_bootable_slot(&slot, shared_data.bslot);
-		if (rc != 0) {
-			shared_data.bslot = 0U;
-			shared_data.bcnt = 0U;
+		SBK_IMAGE_STATE_CLR(walk.state, SBK_IMAGE_STATE_FULL);
+		sbk_image_sfsl_state(&slot, &walk);
+		(void)sbk_slot_close(&slot);
+		if (!SBK_IMAGE_STATE_ISSET(walk.state, SBK_IMAGE_STATE_SBOK)) {
 			continue;
 		}
 
-		shared_data.bcnt++;
-
-		rc = sbk_image_can_run(&slot, &st);
-		(void)sbk_slot_close(&slot);
-		SBK_LOG_DBG("Image state: %x address %x", st.state_flags,
-			    st.im.image_start_address);
-		if (rc == 0) {
-			if ((SBK_IMAGE_STATE_ICONF_IS_SET(st.state_flags)) ||
-			    (SBK_IMAGE_STATE_SCONF_IS_SET(st.state_flags))) {
-				shared_data.bcnt = 0U;
-			}
-
-			SBK_LOG_DBG("Jumping to address: %x bcnt: %d",
-				    st.im.image_start_address,
-				    shared_data.bcnt);
-			sbk_jump_image(st.im.image_start_address);
+		if (!rv) {
+			st->info = walk.info;
+			st->state = walk.state;
+			rv = true;
 		}
 
-		shared_data.bslot++;
-		if (shared_data.bslot == start_slot) {
-			break;
+		if (walk.info.image_sequence_number >
+		    st->info.image_sequence_number) {
+			st->info = walk.info;
+			st->state = walk.state;
 		}
-		shared_data.bcnt = 0U;
+	}
+
+	return rv;
+}
+
+bool get_sldr_image(struct sbk_image_state *st)
+{
+	struct sbk_slot slot;
+	bool rv = false;
+
+	if (sbk_open_sldr_slot(&slot) != 0) {
+		goto end;
+	}
+
+	sbk_image_sfsl_state(&slot, st);
+	(void)sbk_slot_close(&slot);
+	if (SBK_IMAGE_STATE_ISSET(st->state, SBK_IMAGE_STATE_SBOK)) {
+		rv = true;
+	}
+
+end:
+	return rv;
+}
+
+int main(void)
+{
+	bool boot;
+	struct sbk_image_state st;
+
+	SBK_LOG_DBG("Welcome...");
+	sbk_set_product(&product);
+
+	boot = !sbk_image_sfsl_sldr_needed();
+
+	if (boot) {
+		boot = get_booteable_image(&st);
+	} else {
+		boot = get_sldr_image(&st);
+	}
+
+	if (boot) {
+		SBK_LOG_DBG("Jumping to address: %x",
+			    st.info.image_start_address);
+		sbk_jump_image(st.info.image_start_address);
 	}
 
 	SBK_LOG_DBG("No bootable image found");
 
-	while(1);
+	while (true)
+		;
 }

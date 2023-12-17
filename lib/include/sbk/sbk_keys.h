@@ -19,9 +19,9 @@ struct sbk_key {
 	size_t key_size;
 };
 
-struct sbk_key *sbk_get_private_key(void);
+void set_sbk_private_key(struct sbk_key *key);
 
-struct sbk_key *sbk_get_public_key(void);
+struct sbk_key *sbk_get_private_key(void);
 
 #ifdef __cplusplus
 }

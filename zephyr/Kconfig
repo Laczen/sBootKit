@@ -16,6 +16,14 @@ config SBK_MINCRYPT
 config SBK_P256M
         bool "Enable p256-m"
 
+config SBK_IMAGE_DEP
+        bool "Enable Image Dependency check"
+        default n
+
+config SBK_PRODUCT_DEP
+        bool "Enable Product Dependency check"
+        default n
+
 if SBK
 
 module = SBK

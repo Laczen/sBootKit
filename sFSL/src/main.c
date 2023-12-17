@@ -11,7 +11,6 @@
 #include "sbk/sbk_util.h"
 #include "sbk/sbk_product.h"
 #include "sbk/sbk_image.h"
-#include "sbk/sbk_boot.h"
 #include "sbk/sbk_log.h"
 
 #ifndef CONFIG_PNAME
@@ -45,11 +44,18 @@ bool get_booteable_image(struct sbk_image_state *st)
 {
 	struct sbk_slot slot;
 	struct sbk_image_state walk;
+	size_t sltcnt = 0U;
 	bool rv = false;
 
-	for (uint8_t slotnr = 0U; slotnr <= 128; slotnr++) {
-		if (sbk_open_rimage_slot(&slot, slotnr) != 0) {
-			break;
+	while (sbk_open_rimage_slot(&slot, sltcnt) == 0) {
+		sltcnt++;
+		(void)sbk_slot_close(&slot);
+	}
+
+	while (sltcnt != 0) {
+		sltcnt--;
+		if (sbk_open_rimage_slot(&slot, sltcnt) != 0) {
+			continue;
 		}
 
 		SBK_IMAGE_STATE_CLR(walk.state, SBK_IMAGE_STATE_FULL);

@@ -4,69 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/ {
-	chosen {
-		zephyr,console = &usart2;
-		zephyr,shell-uart = &usart2;
-		zephyr,code-partition = &slot1_partition;
-	};
-};
-
-&usart1 {
-	status = "disabled";
-};
-
-&i2c1 {
-	status = "disabled";
-};
-
-&i2c2 {
-	status = "disabled";
-};
-
-&i2c3 {
-	status = "disabled";
-};
-
-&i2s1 {
-	status = "disabled";
-};
-
-&spi1 {
-	status = "disabled";
-};
-
-&rtc {
-	status = "disabled";
-};
-
-&gpiob {
-	status = "disabled";
-};
-
-&gpioc {
-	status = "disabled";
-};
-
-&gpiod {
-	status = "disabled";
-};
-
-&gpioe {
-	status = "disabled";
-};
-
-&gpiof {
-	status = "disabled";
-};
-
-&gpiog {
-	status = "disabled";
-};
-
-&gpioh {
-	status = "disabled";
-};
+#include "../app.overlay"
 
 &flash0 {
 	partitions {
@@ -76,7 +14,12 @@
 
 		sfsl_partition: partition@0 {
 			label = "sFSL";
-			reg = <0x00000000 0x00004000>;
+			reg = <0x00000000 0x00008000>;
+		};
+
+		sldr_partition: partition@10000 {
+			label = "sLDR";
+			reg = <0x00010000 0x00010000>;
 		};
 
 		storage_partition: partition@4000 {
@@ -84,24 +27,19 @@
 			reg = <0x00004000 0x0000C000>;
 		};
 
-		slot0_partition: partition@20000 {
-			label = "image";
-			reg = <0x00020000 0x00020000>;
+		image0_partition: partition@20000 {
+			label = "image0";
+			reg = <0x000020000 0x00020000>;
 		};
 
-		slot0tmp_partition: partition@40000 {
-			label ="tmp";
-			reg = <0x00040000 0x00020000>;
-		};
-
-		slot0upd_partition: partition@60000 {
-			label ="update";
+		update0_partition: partition@60000 {
+			label = "update0";
 			reg = <0x00060000 0x00020000>;
 		};
 
-		slot1_partition: partition@10000 {
-			label = "loader";
-			reg = <0x00010000 0x00010000>;
+		backup0_partition: partition@40000 {
+			label = "backup0";
+			reg = <0x00040000 0x00020000>;
 		};
 	};
 };

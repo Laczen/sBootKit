@@ -19,7 +19,7 @@ struct sbk_key {
 	size_t key_size;
 };
 
-void set_sbk_private_key(struct sbk_key *key);
+void set_sbk_private_key(const struct sbk_key *key);
 
 struct sbk_key *sbk_get_private_key(void);
 

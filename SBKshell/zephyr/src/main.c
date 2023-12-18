@@ -24,48 +24,53 @@ LOG_MODULE_REGISTER(sswpshell, LOG_LEVEL_DBG);
  * @brief sbk_shell interface
  *
  */
-int cli_cmd_reboot(const struct sbk_shell *sh, int argc, char *argv[]) {
-        sbk_shell_print(sh, "Rebooting\n");
-        sys_reboot(0);
-        return 0;
+int cli_cmd_reboot(const struct sbk_shell *sh, int argc, char *argv[])
+{
+	sbk_shell_fprintf(sh, "Rebooting\n");
+	sbk_reboot();
+	return 0;
 }
 
 int cli_bypass_test(const struct sbk_shell *sh, const void *data, size_t len)
 {
-        sbk_shell_print(sh, "bypass called\r\n");
-        return 1;
+	sbk_shell_fprintf(sh, "bypass called\r\n");
+	return 1;
 }
 
-int cli_cmd_bypass(const struct sbk_shell *sh, int argc, char *argv[]) {
+int cli_cmd_bypass(const struct sbk_shell *sh, int argc, char *argv[])
+{
 
-        if (argc < 2) {
-                sbk_shell_print(sh, "Insufficient arguments");
-                return 0;
-        }
+	if (argc < 2) {
+		sbk_shell_fprintf(sh, "Insufficient arguments");
+		return 0;
+	}
 
-        sbk_shell_print(sh, "Going to bypass mode: ");
-        sbk_shell_set_bypass(sh, cli_bypass_test);
-        sbk_shell_print(sh, "OK\n");
-        return 0;
+	sbk_shell_fprintf(sh, "Going to bypass mode: ");
+	sbk_shell_set_bypass(sh, cli_bypass_test);
+	sbk_shell_fprintf(sh, "OK\n");
+	return 0;
 }
 
 static const struct sbk_shell_cmd shell_commands[] = {
-  {"reboot", cli_cmd_reboot, "Reboot the device"},
-  {"bypass", cli_cmd_bypass, "Say hello"},
-  {"help", sbk_shell_help_handler, "Lists all commands"},
+	{"reboot", cli_cmd_reboot, "Reboot the device"},
+	{"bypass", cli_cmd_bypass, "Say hello"},
+	{"help", sbk_shell_help_handler, "Lists all commands"},
 };
 
 SBK_SHELL_DEFINE(tst, shell_commands, 3);
 
 int main(void)
 {
-        LOG_INF("Welcome");
-        sbk_shell_init_transport(tst);
-        sbk_shell_print(tst, "Welcome");
+	uint32_t data = 0xFF;
+	char buf[80];
 
-        while (true) {
-                sbk_shell_receive(tst);
-        }
+	LOG_INF("Welcome");
+	sbk_shell_init_transport(tst);
+	sbk_shell_fprintf(tst, "Welcome %x: %d\r\n", data, data);
 
-        return 0;
+	while (true) {
+		sbk_shell_receive(tst);
+	}
+
+	return 0;
 }

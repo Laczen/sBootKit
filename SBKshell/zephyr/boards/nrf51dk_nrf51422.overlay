@@ -9,12 +9,6 @@
 /delete-node/ &slot1_partition;
 /delete-node/ &storage_partition;
 
-/ {
-	chosen {
-		zephyr,code-partition = &slot1_partition;
-	};
-};
-
 &flash0 {
 	partitions {
 		compatible = "fixed-partitions";
@@ -65,6 +59,3 @@
 		};
 	};
 };
-
-
-

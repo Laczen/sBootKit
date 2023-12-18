@@ -6,6 +6,6 @@
 
 / {
 	chosen {
-		zephyr,code-partition = &sldr_partition;
+		zephyr,code-partition = &sfsl_partition;
 	};
 };

@@ -9,9 +9,9 @@
 
 static struct sbk_key *private_key = NULL;
 
-void set_sbk_private_key(struct sbk_key *key)
+void set_sbk_private_key(const struct sbk_key *key)
 {
-	private_key = key;
+	private_key = (struct sbk_key *)key;
 }
 
 struct sbk_key *sbk_get_private_key(void)

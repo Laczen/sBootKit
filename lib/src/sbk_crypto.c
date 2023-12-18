@@ -11,9 +11,13 @@
 #include "sbk/sbk_crypto.h"
 #include "sbk/sbk_util.h"
 #include "sbk/sbk_log.h"
+#ifdef CONFIG_SBK_MINCRYPT
 #include "mincrypt/crypto_sha256.h"
 #include "mincrypt/crypto_chacha20poly1305.h"
+#endif
+#ifdef CONFIG_SBK_P256M
 #include "p256-m.h"
+#endif
 
 void sbk_crypto_cwipe(void *secret, size_t size)
 {
@@ -36,6 +40,7 @@ int sbk_crypto_compare(const void *s1, const void *s2, size_t len)
 	return rc;
 }
 
+#ifdef CONFIG_SBK_MINCRYPT
 void sbk_crypto_kxch(const struct sbk_crypto_kxch_ctx *ctx, void *keymaterial,
 		     size_t keymaterial_size)
 {
@@ -48,7 +53,14 @@ void sbk_crypto_kxch(const struct sbk_crypto_kxch_ctx *ctx, void *keymaterial,
 
 	sbk_crypto_cwipe(prk, sizeof(prk));
 }
+#else
+void sbk_crypto_kxch(const struct sbk_crypto_kxch_ctx *ctx, void *keymaterial,
+		     size_t keymaterial_size)
+{
+}
+#endif
 
+#ifdef CONFIG_SBK_MINCRYPT
 static int sbk_crypto_hmac_calc(void *hmac, const void *key, size_t key_size,
 				const struct sbk_crypto_read_ctx *read_ctx,
 				size_t msg_len)
@@ -77,7 +89,16 @@ end:
 	sbk_crypto_cwipe(buf, sizeof(buf));
 	return rc;
 }
+#else
+static int sbk_crypto_hmac_calc(void *hmac, const void *key, size_t key_size,
+				const struct sbk_crypto_read_ctx *read_ctx,
+				size_t msg_len)
+{
+	return -SBK_EC_EFAULT;
+}
+#endif
 
+#ifdef CONFIG_SBK_MINCRYPT
 int sbk_crypto_hmac_vrfy(const struct sbk_crypto_hmac_ctx *ctx,
 			 const struct sbk_crypto_read_ctx *read_ctx,
 			 size_t msg_len)
@@ -100,7 +121,16 @@ end:
 	sbk_crypto_cwipe(hmac, sizeof(hmac));
 	return rc;
 }
+#else
+int sbk_crypto_hmac_vrfy(const struct sbk_crypto_hmac_ctx *ctx,
+			 const struct sbk_crypto_read_ctx *read_ctx,
+			 size_t msg_len)
+{
+	return -SBK_EC_EFAULT;
+}
+#endif
 
+#ifdef CONFIG_SBK_MINCRYPT
 static int sbk_crypto_hash_calc(void *hash,
 				const struct sbk_crypto_read_ctx *read_ctx,
 				size_t msg_len)
@@ -129,7 +159,16 @@ end:
 	sbk_crypto_cwipe(buf, sizeof(buf));
 	return rc;
 }
+#else
+static int sbk_crypto_hash_calc(void *hash,
+				const struct sbk_crypto_read_ctx *read_ctx,
+				size_t msg_len)
+{
+	return 0;
+}
+#endif
 
+#ifdef CONFIG_SBK_MINCRYPT
 int sbk_crypto_hash_vrfy(const struct sbk_crypto_hash_ctx *ctx,
 			 const struct sbk_crypto_read_ctx *read_ctx,
 			 size_t msg_len)
@@ -151,7 +190,16 @@ end:
 	sbk_crypto_cwipe(hash, sizeof(hash));
 	return rc;
 }
+#else
+int sbk_crypto_hash_vrfy(const struct sbk_crypto_hash_ctx *ctx,
+			 const struct sbk_crypto_read_ctx *read_ctx,
+			 size_t msg_len)
+{
+	return -SBK_EC_EFAULT;
+}
+#endif
 
+#if defined(CONFIG_SBK_MINCRYPT) && defined(CONFIG_SBK_P256M)
 int sbk_crypto_sigp256_vrfy(const struct sbk_crypto_sigp256_ctx *ctx,
 			    const struct sbk_crypto_read_ctx *read_ctx,
 			    size_t msg_len)
@@ -177,13 +225,29 @@ end:
 	sbk_crypto_cwipe(hash, sizeof(hash));
 	return rc;
 }
+#else
+int sbk_crypto_sigp256_vrfy(const struct sbk_crypto_sigp256_ctx *ctx,
+			    const struct sbk_crypto_read_ctx *read_ctx,
+			    size_t msg_len)
+{
+	return -SBK_EC_EFAULT;
+}
+#endif
 
+#ifdef CONFIG_SBK_MINCRYPT
 size_t sbk_crypto_ciphered_read_km_size(void)
 {
 	return crypto_chacha20_ietf_key_size() +
 	       crypto_chacha20_ietf_nonce_size();
 }
+#else
+size_t sbk_crypto_ciphered_read_km_size(void)
+{
+	return 0U;
+}
+#endif
 
+#ifdef CONFIG_SBK_MINCRYPT
 int sbk_crypto_ciphered_read(const struct sbk_crypto_ciphered_read_ctx *ctx,
 			     uint32_t off, void *data, size_t len)
 {
@@ -224,3 +288,10 @@ int sbk_crypto_ciphered_read(const struct sbk_crypto_ciphered_read_ctx *ctx,
 
 	return rc;
 }
+#else
+int sbk_crypto_ciphered_read(const struct sbk_crypto_ciphered_read_ctx *ctx,
+			     uint32_t off, void *data, size_t len)
+{
+	return -SBK_EC_EFAULT;
+}
+#endif

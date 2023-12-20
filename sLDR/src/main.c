@@ -160,7 +160,7 @@ bool swap_images(void)
 {
 	struct sbk_slot slot;
 	uint32_t sltcnt = 0;
-	bool rv;
+	bool rv = false;
 
 	while (sbk_open_image_slot(&slot, sltcnt) == 0) {
 		sltcnt++;
@@ -187,12 +187,11 @@ int main(void)
 	set_sbk_private_key(&pkey);
 	sbk_set_product(&product);
 
-	// if (swap_images()) {
-	// 	sbk_reboot();
-	// }
+	if (swap_images()) {
+		sbk_reboot();
+	}
 
 	sbk_shell_init_transport(tst);
-	sbk_shell_fprintf(tst, "Welcome\r\n");
 
 	while (true) {
 		sbk_shell_receive(tst);

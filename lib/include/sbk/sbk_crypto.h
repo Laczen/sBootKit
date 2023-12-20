@@ -18,43 +18,44 @@ extern "C" {
  */
 
 struct sbk_crypto_read_ctx {
-        const void *ctx;
-        int (*read)(const void *ctx, uint32_t off, void *data, size_t len);
+	const void *ctx;
+	int (*read)(const void *ctx, uint32_t off, void *data, size_t len);
 };
 
-
 struct sbk_crypto_kxch_ctx {
-        const void *pkey;
-        size_t pkey_size;
-        const void *salt;
-        size_t salt_size;
+	const void *pkey;
+	size_t pkey_size;
+	const void *salt;
+	size_t salt_size;
 	const void *context;
-        size_t context_size;
+	size_t context_size;
 };
 
 struct sbk_crypto_hmac_ctx {
-        const void *key;
-        size_t key_size;
-        const void *hmac;
-        size_t hmac_size;
+	const void *key;
+	size_t key_size;
+	const void *hmac;
+	size_t hmac_size;
+	size_t chunk_size;
 };
 
 struct sbk_crypto_hash_ctx {
-        const void *hash;
-        size_t hash_size;
+	const void *hash;
+	size_t hash_size;
+	size_t chunk_size;
 };
 
 struct sbk_crypto_sigp256_ctx {
-        const void *pubkey;
-        size_t pubkey_size;
-        const void *signature;
-        size_t signature_size;
+	const void *pubkey;
+	size_t pubkey_size;
+	const void *signature;
+	size_t signature_size;
 };
 
 struct sbk_crypto_ciphered_read_ctx {
-        const struct sbk_crypto_read_ctx *read_ctx;
-        const void *key;
-        size_t key_size;
+	const struct sbk_crypto_read_ctx *read_ctx;
+	const void *key;
+	size_t key_size;
 };
 
 /**
@@ -77,7 +78,7 @@ void sbk_crypto_cwipe(void *secret, size_t size);
  * @param keymaterial_size: expected size of key material,
  */
 void sbk_crypto_kxch(const struct sbk_crypto_kxch_ctx *ctx, void *keymaterial,
-                     size_t keymaterial_size);
+		     size_t keymaterial_size);
 
 /**
  * @brief sbk_crypto_hmac_vrfy
@@ -90,9 +91,9 @@ void sbk_crypto_kxch(const struct sbk_crypto_kxch_ctx *ctx, void *keymaterial,
  * @return 0 if valid, nonzero otherwise
  *
  */
-int sbk_crypto_hmac_vrfy(const struct sbk_crypto_hmac_ctx *ctx,
-                         const struct sbk_crypto_read_ctx *read_ctx,
-                         size_t msg_len);
+int sbk_crypto_hmac_vrfy(const struct sbk_crypto_hmac_ctx *hmac_ctx,
+			 const struct sbk_crypto_read_ctx *read_ctx,
+			 size_t msg_len);
 
 /**
  * @brief sbk_crypto_hash_vrfy
@@ -104,9 +105,9 @@ int sbk_crypto_hmac_vrfy(const struct sbk_crypto_hmac_ctx *ctx,
  * @param msg_len: length of the message to verify
  * @return 0 if valid, nonzero otherwise
  */
-int sbk_crypto_hash_vrfy(const struct sbk_crypto_hash_ctx *ctx,
-                         const struct sbk_crypto_read_ctx *read_ctx,
-                         size_t msg_len);
+int sbk_crypto_hash_vrfy(const struct sbk_crypto_hash_ctx *hash_ctx,
+			 const struct sbk_crypto_read_ctx *read_ctx,
+			 size_t msg_len);
 
 /**
  * @brief sbk_crypto_sigp256_vrfy
@@ -118,9 +119,9 @@ int sbk_crypto_hash_vrfy(const struct sbk_crypto_hash_ctx *ctx,
  * @param msg_len: length of the message to verify
  * @return 0 if valid, nonzero otherwise
  */
-int sbk_crypto_sigp256_vrfy(const struct sbk_crypto_sigp256_ctx *ctx,
-                            const struct sbk_crypto_read_ctx *read_ctx,
-                            size_t msg_len);
+int sbk_crypto_sigp256_vrfy(const struct sbk_crypto_sigp256_ctx *sig_ctx,
+			    const struct sbk_crypto_read_ctx *read_ctx,
+			    size_t msg_len);
 
 size_t sbk_crypto_ciphered_read_km_size(void);
 
@@ -136,12 +137,11 @@ size_t sbk_crypto_ciphered_read_km_size(void);
  * @return 0 if OK, nonzero otherwise
  */
 int sbk_crypto_ciphered_read(const struct sbk_crypto_ciphered_read_ctx *ctx,
-                             uint32_t off, void *data, size_t len);
+			     uint32_t off, void *data, size_t len);
 
 /**
  * @}
  */
-
 
 #ifdef __cplusplus
 }

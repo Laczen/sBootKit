@@ -268,7 +268,6 @@ static bool sbk_image_in_exe_slot(const struct sbk_slot *slot,
 		rv = true;
 	}
 
-	SBK_LOG_DBG("%s", rv ? "runnable from slot" : "can't run from slot");
 	return rv;
 }
 
@@ -310,6 +309,7 @@ static bool sbk_image_hash_ok(const struct sbk_slot *slot,
 	const struct sbk_crypto_hash_ctx hctx = {
 		.hash = (void *)&info->image_hash[0],
 		.hash_size = SBK_IMAGE_HASH_SIZE,
+		.chunk_size = 512,
 	};
 	bool rv = false;
 
@@ -672,6 +672,7 @@ bool sbk_image_sldr_auth_ok(const struct sbk_slot *slot)
 	rv = sbk_image_sldr_hmac_ok(slot, &auth, otk, sizeof(otk));
 	sbk_crypto_cwipe(otk, sizeof(otk));
 end:
+	SBK_LOG_DBG("auth %s", rv ? "valid" : "invalid");
 	return rv;
 }
 
@@ -706,7 +707,7 @@ static int sbk_image_ciphered_read(const struct sbk_crypto_slot_ctx *sctx,
 				sizeof(otk));
 
 	const struct sbk_crypto_read_ctx rdctx = {
-		.ctx = (void *)&sctx,
+		.ctx = sctx,
 		.read = sbk_crypto_slot_read,
 	};
 	const struct sbk_crypto_ciphered_read_ctx crdctx = {

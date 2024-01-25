@@ -29,14 +29,12 @@ zephyr_include_directories(
     ${ROOT_DIR}/lib/include
 )
 zephyr_library_sources(
-    ${SBOOTKIT_DIR}/src/sbk_product.c
-    ${SBOOTKIT_DIR}/src/sbk_keys.c
     ${SBOOTKIT_DIR}/src/sbk_crypto.c
     ${SBOOTKIT_DIR}/src/sbk_image.c
     ${SBOOTKIT_DIR}/src/sbk_slot.c
+    ${SBOOTKIT_DIR}/src/sbk_tlv.c
     ${SBOOTKIT_DIR}/src/sbk_util.c
     ${SBOOTKIT_DIR}/src/sbk_shell.c
-
 )
 
 zephyr_include_directories_ifdef(CONFIG_SBK_MINCRYPT

@@ -6,6 +6,18 @@
 
 #include "sbk/sbk_util.h"
 
+static struct sbk_key *private_key = NULL;
+
+void set_sbk_private_key(const struct sbk_key *key)
+{
+	private_key = (struct sbk_key *)key;
+}
+
+struct sbk_key *sbk_get_private_key(void)
+{
+	return private_key;
+}
+
 uint8_t sbk_crc8(uint8_t crc, void *data, size_t len)
 {
 	static const uint8_t kvs_crc8_ccitt_table[16] = {

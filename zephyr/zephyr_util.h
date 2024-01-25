@@ -20,4 +20,4 @@ extern "C"
 }
 #endif
 
-#endif /* ZEPHYR_OS_CONFIG_H_*/
+#endif /* ZEPHYR_UTIL_H_*/

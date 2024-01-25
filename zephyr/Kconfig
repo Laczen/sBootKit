@@ -24,6 +24,14 @@ config SBK_PRODUCT_DEP
         bool "Enable Product Dependency check"
         default n
 
+config SBK_IS_SFSL
+        bool "Enable secure first stage loader options"
+        default n
+
+config SBK_IS_SLDR
+        bool "Enable secure loader options"
+        default n
+
 if SBK
 
 module = SBK

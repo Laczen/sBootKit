@@ -19,10 +19,15 @@
 
 		sfsl_partition: partition@0 {
 			label = "sFSL";
-			reg = <0x00000000 0x00003000>;
+			reg = <0x00000000 0x00002E00>;
 		};
 
-		sldr_partition: partition@2000 {
+		productdata_partition: partition@2E00 {
+			label = "productDATA";
+			reg = <0x00002E00 0x00000200>;
+		};
+
+		sldr_partition: partition@3000 {
 			label = "sLDR";
 			reg = <0x00003000 0x00004000>;
 		};

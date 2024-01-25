@@ -9,47 +9,26 @@
 
 #include "sbk/sbk_slot.h"
 #include "sbk/sbk_util.h"
-#include "sbk/sbk_product.h"
+#include "sbk/sbk_tlv.h"
 #include "sbk/sbk_image.h"
 #include "sbk/sbk_log.h"
 
-#ifndef CONFIG_PNAME
-#define CONFIG_PNAME "TEST"
-#endif
-#ifndef CONFIG_PVER_MAJ
-#define CONFIG_PVER_MAJ 0
-#endif
-#ifndef CONFIG_PVER_MIN
-#define CONFIG_PVER_MIN 0
-#endif
-#ifndef CONFIG_PVER_REV
-#define CONFIG_PVER_REV 0
-#endif
-
-static struct sbk_version product_version = {
-	.major = CONFIG_PVER_MAJ,
-	.minor = CONFIG_PVER_MIN,
-	.revision = CONFIG_PVER_REV,
-};
-
-static struct sbk_product product = {
-	.name = CONFIG_PNAME,
-	.name_size = sizeof(CONFIG_PNAME) - 1,
-	.version = &product_version,
-};
-
 #define BOOT_RETRIES 4
 
-bool get_booteable_image(struct sbk_image_state *st)
+bool get_booteable_image(struct sbk_image_info *info, uint8_t *idx, bool test)
 {
 	struct sbk_slot slot;
-	struct sbk_image_state walk;
+	struct sbk_image_info walk;
 	size_t sltcnt = 0U;
 	bool rv = false;
 
 	while (sbk_open_rimage_slot(&slot, sltcnt) == 0) {
 		sltcnt++;
 		(void)sbk_slot_close(&slot);
+	}
+
+	if (sltcnt == 1) {
+		test = true;
 	}
 
 	while (sltcnt != 0) {
@@ -61,27 +40,32 @@ bool get_booteable_image(struct sbk_image_state *st)
 		SBK_IMAGE_STATE_CLR(walk.state, SBK_IMAGE_STATE_FULL);
 		sbk_image_sfsl_state(&slot, &walk);
 		(void)sbk_slot_close(&slot);
+
+		if (test) {
+			SBK_IMAGE_STATE_SET(walk.state, SBK_IMAGE_STATE_ICNF);
+		}
+
 		if (!SBK_IMAGE_STATE_ISSET(walk.state, SBK_IMAGE_STATE_SBOK)) {
 			continue;
 		}
 
+		
 		if (!rv) {
-			st->info = walk.info;
-			st->state = walk.state;
+			memcpy(info, &walk, sizeof(walk));
+			*idx = sltcnt;
 			rv = true;
 		}
 
-		if (walk.info.image_sequence_number >
-		    st->info.image_sequence_number) {
-			st->info = walk.info;
-			st->state = walk.state;
+		if (walk.image_sequence_number > info->image_sequence_number) {
+			memcpy(info, &walk, sizeof(walk));
+			*idx = sltcnt;
 		}
 	}
 
 	return rv;
 }
 
-bool get_sldr_image(struct sbk_image_state *st)
+bool get_sldr_image(struct sbk_image_info *info)
 {
 	struct sbk_slot slot;
 	bool rv = false;
@@ -90,9 +74,9 @@ bool get_sldr_image(struct sbk_image_state *st)
 		goto end;
 	}
 
-	sbk_image_sfsl_state(&slot, st);
+	sbk_image_sfsl_state(&slot, info);
 	(void)sbk_slot_close(&slot);
-	if (SBK_IMAGE_STATE_ISSET(st->state, SBK_IMAGE_STATE_SBOK)) {
+	if (SBK_IMAGE_STATE_ISSET(info->state, SBK_IMAGE_STATE_SBOK)) {
 		rv = true;
 	}
 
@@ -102,24 +86,33 @@ end:
 
 int main(void)
 {
-	bool boot;
-	struct sbk_image_state st;
+	bool boot = false;
+	struct sbk_tlv_bootinfo bootinfo;
+	struct sbk_image_info info;
 
 	SBK_LOG_DBG("Welcome...");
-	sbk_set_product(&product);
+	SBK_LOG_DBG("Available RAM: %d", CONFIG_SRAM_SIZE);
 
-	boot = !sbk_image_sfsl_sldr_needed();
+	if ((sbk_tlv_get_bootinfo(&bootinfo) == 0) && 
+	    (bootinfo.cmd != SBK_BOOTINFO_CMDSLDR) &&
+	    (bootinfo.cnt != 0U)) {
+		bool test = (bootinfo.cmd == SBK_BOOTINFO_CMDTEST); 
+		
+		bootinfo.cnt--;
+		boot = get_booteable_image(&info, &bootinfo.idx, test);
+	}
 
-	if (boot) {
-		boot = get_booteable_image(&st);
-	} else {
-		boot = get_sldr_image(&st);
+	if (!boot) {
+		boot = get_sldr_image(&info);
 	}
 
 	if (boot) {
-		SBK_LOG_DBG("Jumping to address: %x",
-			    st.info.image_start_address);
-		sbk_jump_image(st.info.image_start_address);
+		bootinfo.cmd = SBK_BOOTINFO_CMDNONE;
+		(void)sbk_tlv_set_bootinfo(&bootinfo);
+
+		SBK_LOG_DBG("Jumping to address: %x", info.image_start_address);
+		sbk_boot_prep(info.image_start_address);
+		sbk_jump_image(info.image_start_address);
 	}
 
 	SBK_LOG_DBG("No bootable image found");

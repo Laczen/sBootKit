@@ -10,8 +10,7 @@
 
 #include "sbk/sbk_slot.h"
 #include "sbk/sbk_util.h"
-#include "sbk/sbk_product.h"
-#include "sbk/sbk_keys.h"
+#include "sbk/sbk_tlv.h"
 #include "sbk/sbk_image.h"
 #include "sbk/sbk_log.h"
 #include "sbk/sbk_shell.h"
@@ -62,7 +61,7 @@ int cli_cmd_info(const struct sbk_shell *sh, int argc, char *argv[])
 {
 	size_t sltcnt;
 	struct sbk_slot slot;
-	struct sbk_image_state state;
+	struct sbk_image_info info;
 
 	sltcnt = 0U;
 	while (sbk_open_image_slot(&slot, sltcnt) == 0) {
@@ -77,11 +76,11 @@ int cli_cmd_info(const struct sbk_shell *sh, int argc, char *argv[])
 			continue;
 		}
 
-		state.state = 0U;
-		sbk_image_sldr_state(&slot, &state);
+		info.state = 0U;
+		sbk_image_sldr_state(&slot, &info);
 		(void)sbk_slot_close(&slot);
 		sbk_shell_fprintf(sh, "slt %d: state %x\r\n", sltcnt,
-				  state.state);
+				  info.state);
 	}
 
 	sltcnt = 0U;
@@ -97,11 +96,11 @@ int cli_cmd_info(const struct sbk_shell *sh, int argc, char *argv[])
 			continue;
 		}
 
-		state.state = 0U;
-		sbk_image_sldr_state(&slot, &state);
+		info.state = 0U;
+		sbk_image_sldr_state(&slot, &info);
 		(void)sbk_slot_close(&slot);
 		sbk_shell_fprintf(sh, "slt %d: state %x\r\n", sltcnt,
-				  state.state);
+				  info.state);
 	}
 
 	sltcnt = 0U;
@@ -117,11 +116,11 @@ int cli_cmd_info(const struct sbk_shell *sh, int argc, char *argv[])
 			continue;
 		}
 
-		state.state = 0U;
-		sbk_image_sldr_state(&slot, &state);
+		info.state = 0U;
+		sbk_image_sldr_state(&slot, &info);
 		(void)sbk_slot_close(&slot);
 		sbk_shell_fprintf(sh, "slt %d: state %x\r\n", sltcnt,
-				  state.state);
+				  info.state);
 	}
 
 	return 0;

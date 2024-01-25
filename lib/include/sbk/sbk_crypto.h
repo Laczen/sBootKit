@@ -69,6 +69,17 @@ struct sbk_crypto_ciphered_read_ctx {
 void sbk_crypto_cwipe(void *secret, size_t size);
 
 /**
+ * @brief sbk_crypto_compare
+ *
+ * Secure data compare
+ *
+ * @param s1: data to compare
+ * @param s2: data to compare
+ * @param size: size to compare
+ */
+int sbk_crypto_compare(const void *s1, const void *s2, size_t len);
+
+/**
  * @brief sbk_crypto_kxch
  *
  * Key exchange

@@ -85,3 +85,8 @@ void sbk_reboot(void)
 {
 	sys_reboot(0);
 }
+
+void sbk_boot_prep(unsigned long address)
+{
+	/* This can be used for setup before calling sbk_jump_image */
+}

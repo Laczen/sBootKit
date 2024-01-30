@@ -32,10 +32,11 @@ from Crypto.Protocol.KDF import HKDF
 from Crypto.Cipher import ChaCha20
 
 SBK_IMAGE_INFO_TAG = 0x8000
+SBK_IMAGE_TLVF_TAG = 0x80FC
 SBK_IMAGE_SFSL_TAG = 0x80FD
 SBK_IMAGE_PUBK_TAG = 0x80FE
 SBK_IMAGE_SLDR_TAG = 0x80FF
-SBK_IMAGE_FLAG_CONFIRMED = 0x00000001
+SBK_IMAGE_FLAG_TEST = 0x00000001
 SBK_IMAGE_FLAG_ENCRYPTED = 0x00000010
 SBK_IMAGE_FLAG_ZLIB = 0x00000020
 SBK_IMAGE_FLAG_VCDIFF = 0x00000040
@@ -150,7 +151,7 @@ class Image():
             '32s'   # Image hash
         )
 
-        print(struct.calcsize(meta_fmt))
+        #print(struct.calcsize(meta_fmt))
         info = struct.pack(meta_fmt,
             SBK_IMAGE_INFO_TAG, struct.calcsize(meta_fmt),
             0,
@@ -165,7 +166,7 @@ class Image():
             self.hash,
         )
 
-        print(' '.join(format(x, '02x') for x in self.hash))
+        #print(' '.join(format(x, '02x') for x in self.hash))
 
         image_dep_fmt = (e +
             'HH' +  # rec_tag + rec_len
@@ -194,50 +195,32 @@ class Image():
             'HH' +  # rec_tag + rec_len
             'BBH' + # minimum version
             'BBH' + # maximum version
-            '32s' + # product hash
+            '32s' + # product guid
             'H' +   # next product dependency tag
             'H'     # pad16
         )
 
         n = 0
         for product_dep in self.product_dep:
-            phash = sbktcrypto.sha256(product_dep[0])
+            guid = sbktcrypto.sha256(product_dep[0])
             vrange = product_dep[1]
             info += struct.pack(product_dep_fmt,
                 product_dep_tag[n], struct.calcsize(product_dep_fmt),
                 vrange[0].major, vrange[0].minor, vrange[0].revision,
                 vrange[1].major, vrange[1].minor, vrange[1].revision,
-                phash,
+                guid,
                 product_dep_tag[n + 1],
                 0
             )
             n = n + 1
 
-        # add sfsl meta
-        e = STRUCT_ENDIAN_DICT[self.endian]
-        sfsl_meta_fmt = (e +
-            'HH' +  # rec_tag + rec_len
-            '64s' +    # pubkey
-            '64s'      # signature
-        )
-
-        sfsl_pubkey = sfsl_key[0].p256_pubkey()
-        sfsl_sig = sfsl_key[0].p256_sign(info)
-        info += struct.pack(sfsl_meta_fmt,
-            SBK_IMAGE_SFSL_TAG, struct.calcsize(sfsl_meta_fmt),
-            sfsl_pubkey,
-            sfsl_sig,
-        )
-
-        print(' '.join(format(x, '02x') for x in sfsl_pubkey))
-
-        # add pubkey hash array
+        # calculate pubkey hash array
         if inclpk:
             e = STRUCT_ENDIAN_DICT[self.endian]
             pkhash_meta_fmt = (e +
                 'HH' # rec_tag + rec_len
             )
-            info += struct.pack(pkhash_meta_fmt,
+            pubkeyhasharray = struct.pack(pkhash_meta_fmt,
                 SBK_IMAGE_PUBK_TAG,
                 struct.calcsize(pkhash_meta_fmt) + 32 * len(sfsl_key)
             )
@@ -246,16 +229,56 @@ class Image():
             )
             for key in sfsl_key:
                 pubkeyhash = key.p256_pubkeyhash()
-                info += struct.pack(pkhash_meta_fmt, pubkeyhash)
-                print(' '.join(format(x, '02x') for x in pubkeyhash))
+                pubkeyhasharray += struct.pack(pkhash_meta_fmt, pubkeyhash)
+                #print(' '.join(format(x, '02x') for x in pubkeyhash))
 
-        # add sldr meta
+        # sfsl format
+        e = STRUCT_ENDIAN_DICT[self.endian]
+        sfsl_meta_fmt = (e +
+            'HH' +  # rec_tag + rec_len
+            '64s' +    # pubkey
+            '64s'      # signature
+        )
+
+        # sldr format
         e = STRUCT_ENDIAN_DICT[self.endian]
         sldr_meta_fmt = (e +
             'HH' +  # rec_tag + rec_len
             '16s' +    # salt
             '32s'      # hmac
         )
+
+        filler_size = self.hdrsize
+        filler_size -= len(info)
+        filler_size -= len(pubkeyhasharray)
+        filler_size -= struct.calcsize(sldr_meta_fmt)
+        filler_size -= struct.calcsize(sfsl_meta_fmt)
+
+        if (filler_size < 0):
+            raise Exception("Header size to small to fit meta data")
+        
+        if (filler_size > 3):
+            # insert filler
+            e = STRUCT_ENDIAN_DICT[self.endian]
+            filler_meta_fmt = (e +
+                'HH' # rec_tag + rec_len
+            )
+            info += struct.pack(filler_meta_fmt,
+                SBK_IMAGE_TLVF_TAG,
+                filler_size,
+            )
+            info += bytearray([0x55] * (filler_size - struct.calcsize(filler_meta_fmt)))
+      
+        sfsl_pubkey = sfsl_key[0].p256_pubkey()
+        sfsl_sig = sfsl_key[0].p256_sign(info)
+        info += struct.pack(sfsl_meta_fmt,
+            SBK_IMAGE_SFSL_TAG, struct.calcsize(sfsl_meta_fmt),
+            sfsl_pubkey,
+            sfsl_sig,
+        )
+
+        if inclpk:
+            info += pubkeyhasharray
 
         sldr_hmac = sldr_key.rpk_sign(self.salt, SBK_IMAGE_HMAC_CONTEXT, info)
         info += struct.pack(sldr_meta_fmt,
@@ -264,24 +287,19 @@ class Image():
             sldr_hmac,
         )
 
-        print(len(info))
-        if len(info) > self.hdrsize:
-            raise Exception("Header size to small to fit meta data")
-
-        info = info + bytearray([0] * (self.hdrsize - len(info)))
         self.payload[:self.hdrsize] = info
         return len(info)
 
     def show(self, data):
         print('\\x' + '\\x'.join(format(x, '02x') for x in data))
 
-    def create(self, sfslkey, sldrkey, confirm, encrypt, inclpk):
+    def create(self, sfslkey, sldrkey, test, encrypt, inclpk):
 
         if encrypt:
             self.flags |= SBK_IMAGE_FLAG_ENCRYPTED
 
-        if confirm:
-            self.flags |= SBK_IMAGE_FLAG_CONFIRMED
+        if test:
+            self.flags |= SBK_IMAGE_FLAG_TEST
 
         if encrypt:
             self.payload[self.hdrsize:]=sldrkey.rpk_encrypt(self.salt,

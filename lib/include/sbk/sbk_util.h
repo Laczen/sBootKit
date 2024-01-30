@@ -55,6 +55,7 @@ extern void sbk_watchdog_feed(void);
 extern int sbk_open_sldr_slot(struct sbk_slot *slot);
 extern int sbk_open_productdata_slot(struct sbk_slot *slot);
 extern int sbk_open_shareddata_slot(struct sbk_slot *slot);
+extern int sbk_open_pubkey_slot(struct sbk_slot *slot);
 extern int sbk_open_rimage_slot(struct sbk_slot *slot, uint32_t idx);
 extern int sbk_open_image_slot(struct sbk_slot *slot, uint32_t idx);
 extern int sbk_open_update_slot(struct sbk_slot *slot, uint32_t idx);

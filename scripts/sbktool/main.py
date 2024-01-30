@@ -152,7 +152,7 @@ class BasedIntParamType(click.ParamType):
               default = "0")
 @click.option('-prd','--product', multiple=True, type = str,
               callback = convert_product_dep,
-              help = 'Product dependency, productname:version range')
+              help = 'Product dependency, product:version range')
 @click.option('-dep','--dependency', multiple=True, type = str,
               callback = convert_image_dep,
               help = 'Image dependency, image address:version range')
@@ -162,14 +162,12 @@ class BasedIntParamType(click.ParamType):
               help = 'include pubkey hashes in image meta data')
 @click.option('-lk','--ldrkey', metavar = 'filename', required = True,
               help = 'Loader authentication/encryption using the provided key')
-@click.option('-c','--confirm', is_flag = True, help = 'create confirmed image')
+@click.option('-t','--test', is_flag = True, help = 'create test image')
 @click.option('-e','--encrypt', is_flag = True, help = 'create encrypted image')
-@click.option('-tst', '--test-image', is_flag = True,
-              help = 'generate test image as c file')
 @click.command(help='''Create a image for use with sBootKit\n
                INFILE and OUTFILE are of type hex''')
 def create(align, hdrsize, ssnr, version, product, dependency, fslkey, inclpk,
-           ldrkey, confirm, encrypt, test_image, infile, outfile, endian):
+           ldrkey, test, encrypt, infile, outfile, endian):
     fslkeylist = []
     for entry in fslkey:
         key = load_key(entry)
@@ -183,19 +181,10 @@ def create(align, hdrsize, ssnr, version, product, dependency, fslkey, inclpk,
                           product_dep = product, image_dep = dependency,
                           endian = endian, align = align, type = type)
         img.load(infile)
-        img.create(fslkey, ldrkey, confirm, encrypt, inclpk)
+        img.create(fslkey, ldrkey, test, encrypt, inclpk)
         if outfile is not None:
             img.save(outfile)
 
-        if test_image:
-            print("const unsigned char {}[{}] = {{".format("test_image", len(img.payload)), end = '')
-            for count, b in enumerate(img.payload):
-                if count % 8 == 0:
-                    print("\n" + "\t", end='')
-                else:
-                    print(" ", end='')
-                print("0x{:02x},".format(b), end='')
-            print("\n};")
     else:
         print("Wrong bootkey or loadkey provided")
 

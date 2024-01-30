@@ -135,6 +135,7 @@ int sbk_tlv_get_bootinfo(struct sbk_tlv_bootinfo *data)
 			      sizeof(struct sbk_tlv_bootinfo));
 	(void)sbk_slot_close(&slot);
 
+	SBK_LOG_DBG("get_bootinfo [%d]", rc);
 end:
 	return rc;
 
@@ -153,7 +154,7 @@ int sbk_tlv_set_bootinfo(struct sbk_tlv_bootinfo *data)
 	data->rhdr.tag = SBK_BOOTINFO_TAG;
 	data->rhdr.len = sizeof(struct sbk_tlv_bootinfo);
 
-	rc = sbk_slot_prog(&slot, 0, data, sizeof(struct sbk_tlv_product_data));
+	rc = sbk_slot_prog(&slot, 0, data, sizeof(struct sbk_tlv_bootinfo));
 	(void)sbk_slot_close(&slot);
 
 end:

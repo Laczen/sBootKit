@@ -14,27 +14,21 @@ extern "C" {
 
 #define SBK_IMAGE_WBS 64
 
-#define SBK_IMAGE_FLAG_CONF      0x00000001 /* Confirmed image */
+#define SBK_IMAGE_FLAG_TEST      0x00000001 /* Test image */
 #define SBK_IMAGE_FLAG_CIPH      0x00000010 /* Ciphered image */
 #define SBK_IMAGE_FLAG_ZLIB      0x00000020 /* ZLIB compr. image */
 #define SBK_IMAGE_FLAG_VCDIFF    0x00000040 /* VCDIFF image */
-#define SBK_IMAGE_FLAG_WBS_MASK  0x00FF0000 /* WBS as power of 2 */
-#define SBK_IMAGE_FLAG_WBS_SHIFT 16
-#define SBK_IMAGE_FLAG_EBS_MASK  0xFF000000 /* EBS as power of 2 */
-#define SBK_IMAGE_FLAG_EBS_SHIFT 24
 
 #define SBK_IMAGE_HMAC_CONTEXT "SBK HMAC"
 #define SBK_IMAGE_CIPH_CONTEXT "SBK CIPH"
 
 #define SBK_IMAGE_FLAG_ISSET(state, flag) (((state) & (flag)) == flag)
 
-#define SBK_IMAGE_STATE_SCONF_MAGIC "CONF"
-
 #define SBK_IMAGE_STATE_FULL 0xFFFFFFFF /* All flags */
 #define SBK_IMAGE_STATE_IINF 0x00000001 /* Image info available */
-#define SBK_IMAGE_STATE_ICNF 0x00000002 /* Image confirmed */
+#define SBK_IMAGE_STATE_TEST 0x00000002 /* Test image */
 #define SBK_IMAGE_STATE_INRS 0x00000004 /* Image in run slot */
-#define SBK_IMAGE_STATE_PDEP 0x00000008 /* Image product dependency ok */
+#define SBK_IMAGE_STATE_PDEP 0x00000008 /* Image dependency ok */
 
 #define SBK_IMAGE_STATE_BAUT 0x00000010 /* Boot authentication ok */
 #define SBK_IMAGE_STATE_LAUT 0x00000020 /* Loader authentication ok */

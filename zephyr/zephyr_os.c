@@ -11,6 +11,7 @@
 LOG_MODULE_REGISTER(zephyr_os, CONFIG_SBK_LOG_LEVEL);
 
 #define IFLASH_OFFSET  DT_REG_ADDR(DT_INST(0, soc_nv_flash))
+//#define IFLASH_OFFSET 0x80000000
 
 enum slot_type {
 	UNKNOWN,
@@ -111,7 +112,8 @@ static int ioctl(const void *ctx, enum sbk_slot_ioctl_cmd cmd, void *data,
 				(const struct slot_flash_backend *)sctx->backend;
 			uint32_t *address = (uint32_t *)data;
 
-			*address = IFLASH_OFFSET + fb->off;
+			*address += IFLASH_OFFSET + fb->off;
+			LOG_DBG("Address 0x%x", *address);
 			rc = 0;
 		}
 
@@ -248,6 +250,11 @@ int sbk_open_productdata_slot(struct sbk_slot *slot)
 	return 0;
 }
 
+int sbk_open_pubkey_slot(struct sbk_slot *slot)
+{
+	return sbk_open_sldr_slot(slot);
+}
+
 int sbk_open_image_slot(struct sbk_slot *slot, uint32_t idx)
 {
 	if (idx >= 1) {
@@ -333,7 +340,18 @@ int sbk_open_shareddata_slot(struct sbk_slot *slot)
 	slot->read = shared_data_read;
 	slot->prog = shared_data_prog;
 	slot->ioctl = shared_data_ioctl;
+	slot->close = NULL;
 	return 0;
+}
+
+void sbk_watchdog_init(void)
+{
+
+}
+
+void sbk_watchdog_feed(void)
+{
+
 }
 
 /* change this to any other UART peripheral if desired */

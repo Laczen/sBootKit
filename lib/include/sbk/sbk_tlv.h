@@ -46,6 +46,7 @@ struct __attribute__((packed)) sbk_tlv_rhdr { /* record header */
 	uint16_t len;                         /* record length */
 };
 
+
 /* Definitions for product tlvs */
 #define SBK_PRODUCT_DATA_TAG 0x2000 /* Product data tag */
 #define SBK_PRODUCT_NAME_TAG 0x2001 /* Product name tag */
@@ -65,20 +66,18 @@ struct __attribute__((packed)) sbk_tlv_product_name { /* product data */
 
 /* Definitions for shared data tlvs */
 #define SBK_BOOTINFO_TAG 	0x4000 	/* Boot information tag */
-#define SBK_BOOTINFO_CMDNONE	0x00	/* Jump to loader first */
-#define SBK_BOOTINFO_CMDSLDR	0x80	/* Jump to loader first */
-#define SBK_BOOTINFO_CMDTEST	0x81	/* Allow test image */
 
 struct __attribute__((packed)) sbk_tlv_bootinfo { /* bootinfo */
 	struct sbk_tlv_rhdr rhdr;
 	uint8_t idx;
 	uint8_t cnt;
-	uint8_t cmd;
 	uint8_t pad0;
+	uint8_t pad1;
 };
 
 /* Definitions for image tlvs */
 #define SBK_IMAGE_INFO_TAG 0x8000 /* Image info tag */
+#define SBK_IMAGE_TLVF_TAG 0x80FC /* Image tlv filler tag */
 #define SBK_IMAGE_SFSL_TAG 0x80FD /* Secure First Stage Loader tag */
 #define SBK_IMAGE_PUBK_TAG 0x80FE /* Pubkey tag */
 #define SBK_IMAGE_SLDR_TAG 0x80FF /* Secure Loader tag */

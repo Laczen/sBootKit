@@ -15,36 +15,52 @@
 #include "sbk/sbk_log.h"
 #include "sbk/sbk_shell.h"
 
-#ifndef CONFIG_PNAME
-#define CONFIG_PNAME "TEST"
-#endif
-#ifndef CONFIG_PVER_MAJ
-#define CONFIG_PVER_MAJ 0
-#endif
-#ifndef CONFIG_PVER_MIN
-#define CONFIG_PVER_MIN 0
-#endif
-#ifndef CONFIG_PVER_REV
-#define CONFIG_PVER_REV 0
-#endif
-
 #define SBK_PRIVATE_KEY                                                         \
 	"\x2e\xcc\x34\x06\xc9\xac\xd5\xf1\x66\x02\x8d\xb1\x91\xbc\x1c\x5f"      \
 	"\x08\x53\x76\xda\xc0\xe9\xd2\xaf\xab\x37\x66\x65\x1d\x67\x89\x66"
 
-static struct sbk_version product_version = {
-	.major = CONFIG_PVER_MAJ,
-	.minor = CONFIG_PVER_MIN,
-	.revision = CONFIG_PVER_REV,
-};
-
-static struct sbk_product product = {
-	.name = CONFIG_PNAME,
-	.name_size = sizeof(CONFIG_PNAME) - 1,
-	.version = &product_version,
-};
-
 #define BOOT_RETRIES 4
+
+// bool get_booteable_image(struct sbk_image_info *info, uint8_t *idx)
+// {
+// 	struct sbk_slot slot;
+// 	struct sbk_image_info walk;
+// 	size_t sltcnt = 0U;
+// 	bool rv = false;
+
+// 	while (sbk_open_rimage_slot(&slot, sltcnt) == 0) {
+// 		sltcnt++;
+// 		(void)sbk_slot_close(&slot);
+// 	}
+
+// 	while (sltcnt != 0) {
+// 		sltcnt--;
+// 		if (sbk_open_rimage_slot(&slot, sltcnt) != 0) {
+// 			continue;
+// 		}
+
+// 		SBK_IMAGE_STATE_CLR(walk.state, SBK_IMAGE_STATE_FULL);
+// 		sbk_image_sfsl_state(&slot, &walk);
+// 		(void)sbk_slot_close(&slot);
+
+// 		if (!SBK_IMAGE_STATE_ISSET(walk.state, SBK_IMAGE_STATE_SBOK)) {
+// 			continue;
+// 		}
+
+// 		if (!rv) {
+// 			memcpy(info, &walk, sizeof(walk));
+// 			*idx = sltcnt;
+// 			rv = true;
+// 		}
+
+// 		if (walk.image_sequence_number > info->image_sequence_number) {
+// 			memcpy(info, &walk, sizeof(walk));
+// 			*idx = sltcnt;
+// 		}
+// 	}
+
+// 	return rv;
+// }
 
 /**
  * @brief sbk_shell interface
@@ -184,7 +200,6 @@ int main(void)
 	};
 
 	set_sbk_private_key(&pkey);
-	sbk_set_product(&product);
 
 	if (swap_images()) {
 		sbk_reboot();

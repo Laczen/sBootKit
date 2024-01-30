@@ -143,26 +143,6 @@ static bool sbk_image_info_found(const struct sbk_slot *slot,
 	return rc == 0 ? true : false;
 }
 
-static bool sbk_image_local_confirmed(const struct sbk_slot *slot,
-				      const struct sbk_tlv_image_info *tlv_info)
-{
-	uint8_t buf[sizeof(SBK_IMAGE_STATE_SCONF_MAGIC) - 1];
-	uint32_t rdoff = tlv_info->image_offset - sizeof(buf);
-	bool rv = false;
-
-	if (sbk_slot_read(slot, rdoff, &buf, sizeof(buf)) != 0) {
-		goto end;
-	}
-
-	if (memcmp(buf, SBK_IMAGE_STATE_SCONF_MAGIC, sizeof(buf)) == 0) {
-		rv = true;
-	}
-
-end:
-	SBK_LOG_DBG("%s", rv ? "local confirmed" : "local unconfirmed");
-	return rv;
-}
-
 static bool sbk_image_address(const struct sbk_slot *slot, uint32_t *address)
 {
 	return sbk_slot_ioctl(slot, SBK_SLOT_IOCTL_GET_ADDRESS, address,
@@ -200,14 +180,6 @@ static void sbk_image_init_info(const struct sbk_slot *slot,
 
 	info->image_sequence_number = tlv_info->image_sequence_number;
 	info->image_start_address = tlv_info->image_start_address;
-
-	if (SBK_IMAGE_FLAG_ISSET(tlv_info->image_flags, SBK_IMAGE_FLAG_CONF)) {
-		SBK_IMAGE_STATE_SET(info->state, SBK_IMAGE_FLAG_CONF);
-	}
-
-	if (sbk_image_local_confirmed(slot, tlv_info)) {
-		SBK_IMAGE_STATE_SET(info->state, SBK_IMAGE_FLAG_CONF);
-	}
 
 	if (sbk_image_in_exe_slot(slot, tlv_info)) {
 		SBK_IMAGE_STATE_SET(info->state, SBK_IMAGE_STATE_INRS);
@@ -348,22 +320,22 @@ bool sbk_image_sfsl_auth_ok(const struct sbk_slot *slot)
 {
 	const uint16_t tag = SBK_IMAGE_SFSL_TAG;
 	struct sbk_tlv_image_sfsl_auth auth;
-	struct sbk_slot sldr_slot;
+	struct sbk_slot pubkey_slot;
 	bool rv = false;
 
 	if (sbk_tlv_get_data(slot, tag, &auth, sizeof(auth)) != 0) {
 		goto end;
 	}
 
-	if (sbk_open_sldr_slot(&sldr_slot) != 0) {
+	if (sbk_open_pubkey_slot(&pubkey_slot) != 0) {
 		goto end;
 	}
 
-	if ((sbk_image_sfsl_pubkey_ok(&sldr_slot, &auth)) ||
-	    ((!sbk_image_sfsl_has_pubkey_info(&sldr_slot)) &&
+	if ((sbk_image_sfsl_pubkey_ok(&pubkey_slot, &auth)) ||
+	    ((!sbk_image_sfsl_has_pubkey_info(&pubkey_slot)) &&
 	     (sbk_image_sfsl_pubkey_ok(slot, &auth)))) {
-		/* accept pubkey from loader slot or from exe slot if loader
-		 * does not contain pubkey info
+		/* accept pubkey from pubkey slot or from exe slot if pubkey
+		 * slot does not contain pubkey info
 		 */
 		rv = sbk_image_sfsl_sign_ok(slot, &auth);
 	}
@@ -739,6 +711,10 @@ void sbk_image_sldr_state(const struct sbk_slot *slot,
 	}
 
 	sbk_image_init_info(slot, info, &tlv_info);
+
+	if (SBK_IMAGE_FLAG_ISSET(tlv_info.image_flags, SBK_IMAGE_FLAG_TEST)) {
+	 	SBK_IMAGE_STATE_SET(info->state, SBK_IMAGE_STATE_TEST);
+	}
 
 	if (tlv_info.idep_tag == SBK_IMAGE_LEND_TAG) {
 		SBK_IMAGE_STATE_SET(info->state, SBK_IMAGE_STATE_IDEP);

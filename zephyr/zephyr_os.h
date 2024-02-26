@@ -13,12 +13,9 @@ extern "C" {
 #endif
 #define GET_PARTITION_SIZE(label)   DT_REG_SIZE(DT_NODELABEL(label))
 #define GET_PARTITION_OFFSET(label) DT_REG_ADDR(DT_NODELABEL(label))
-#define GET_PARTITION_EBS(label)                                                \
+#define GET_PARTITION_BS(label)							\
 	DT_PROP_OR(DT_GPARENT(DT_NODELABEL(label)), erase_block_size,           \
 		   (GET_PARTITION_SIZE(label)))
-#define GET_PARTITION_WBS(label)                                                \
-	DT_PROP_OR(DT_GPARENT(DT_NODELABEL(label)), write_block_size,           \
-		   (GET_PARTITION_EBS(label)))
 
 #ifdef __cplusplus
 }

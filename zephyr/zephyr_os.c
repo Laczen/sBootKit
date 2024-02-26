@@ -11,23 +11,23 @@
 LOG_MODULE_REGISTER(zephyr_os, CONFIG_SBK_LOG_LEVEL);
 
 #define IFLASH_OFFSET  DT_REG_ADDR(DT_INST(0, soc_nv_flash))
-//#define IFLASH_OFFSET 0x80000000
 
 enum slot_type {
 	UNKNOWN,
 	FLASH_TYPE,
 };
 
-struct slot_flash_backend {
-	const struct device *dev;
-	const uint32_t off;
-	size_t erase_block_size;
-	size_t write_block_size;
-};
 struct slot_ctx {
 	const void *backend;
 	const enum slot_type type;
-	const size_t size;
+	size_t size;
+};
+
+struct slot_flash_backend {
+	const struct device *dev;
+	const uint32_t off;
+	const size_t block_size;
+	const void *data;
 };
 
 static int read(const void *ctx, uint32_t off, void *data, size_t len)
@@ -35,11 +35,7 @@ static int read(const void *ctx, uint32_t off, void *data, size_t len)
 	const struct slot_ctx *sctx = (const struct slot_ctx *)ctx;
 	int rc = -EINVAL;
 
-	if ((len > sctx->size) || (off > (sctx->size - len))) {
-		goto end;
-	}
-
-	if (IS_ENABLED(CONFIG_SBK_IS_SFSL) && !IS_ENABLED(CONFIG_FLASH)) {
+	if (IS_ENABLED(CONFIG_SBK_IS_FSL) && !IS_ENABLED(CONFIG_FLASH)) {
 		const struct slot_flash_backend *fb =
 			(const struct slot_flash_backend *)sctx->backend;
 
@@ -54,7 +50,6 @@ static int read(const void *ctx, uint32_t off, void *data, size_t len)
 		rc = flash_read(fb->dev, fb->off + off, data, len);
 	}
 
-end:
 	return rc;
 }
 
@@ -63,17 +58,17 @@ static int prog(const void *ctx, uint32_t off, const void *data, size_t len)
 	const struct slot_ctx *sctx = (const struct slot_ctx *)ctx;
 	int rc = -EINVAL;
 
-	if ((len > sctx->size) || (off > (sctx->size - len))) {
-		goto end;
-	}
-
 	if (IS_ENABLED(CONFIG_FLASH) && (sctx->type == FLASH_TYPE)) {
 		const struct slot_flash_backend *fb =
 			(const struct slot_flash_backend *)sctx->backend;
-		const size_t ebs = fb->erase_block_size;
+		const size_t bs = fb->block_size;
 
-		if (((off % ebs) == 0U) &&
-		    (flash_erase(fb->dev, fb->off + off, ebs) == 0)) {
+		if ((fb->off + off) % bs != 0U) {
+			rc = flash_write(fb->dev, fb->off + off, data, len);
+			goto end;		 
+		}
+		
+		if (flash_erase(fb->dev, fb->off + off, bs) == 0) {
 			rc = flash_write(fb->dev, fb->off + off, data, len);
 		}
 	}
@@ -82,78 +77,21 @@ end:
 	return rc;
 }
 
-static int ioctl(const void *ctx, enum sbk_slot_ioctl_cmd cmd, void *data,
-		 size_t len)
+static int address(const void *ctx, uint32_t *address)
 {
 	const struct slot_ctx *sctx = (const struct slot_ctx *)ctx;
-	int rc = -ENOTSUP;
+	int rc = -EINVAL;
 
-	switch (cmd) {
-	case SBK_SLOT_IOCTL_GET_SIZE:
-		if ((len != sizeof(size_t)) || (data == NULL)) {
-			rc = -EINVAL;
-			break;
-		}
-
-		size_t *size = (size_t *)data;
-
-		*size = sctx->size;
-		rc = 0;
-		break;
-
-	case SBK_SLOT_IOCTL_GET_ADDRESS:
-		if ((len != sizeof(uint32_t)) || (data == NULL)) {
-			rc = -EINVAL;
-			break;
-		}
-
-		if (sctx->type == FLASH_TYPE) {
-			const struct slot_flash_backend *fb =
-				(const struct slot_flash_backend *)sctx->backend;
-			uint32_t *address = (uint32_t *)data;
-
-			*address += IFLASH_OFFSET + fb->off;
-			LOG_DBG("Address 0x%x", *address);
-			rc = 0;
-		}
-
-		break;
-
-	case SBK_SLOT_IOCTL_GET_ERASE_BLOCK_SIZE:
-		if ((len != sizeof(uint32_t)) || (data == NULL)) {
-			rc = -EINVAL;
-			break;
-		}
-
-		if (sctx->type == FLASH_TYPE) {
-			const struct slot_flash_backend *fb =
-				(const struct slot_flash_backend *)sctx->backend;
-			uint32_t *ebs = (uint32_t *)data;
-
-			*ebs = fb->erase_block_size;
-			rc = 0;
-		}
-
-		break;
-	case SBK_SLOT_IOCTL_GET_WRITE_BLOCK_SIZE:
-		if ((len != sizeof(uint32_t)) || (data == NULL)) {
-			rc = -EINVAL;
-			break;
-		}
-
-		if (sctx->type == FLASH_TYPE) {
-			const struct slot_flash_backend *fb =
-				(const struct slot_flash_backend *)sctx->backend;
-			uint32_t *wbs = (uint32_t *)data;
-
-			*wbs = fb->write_block_size;
-			rc = 0;
-		}
-		break;
-	default:
-		break;
+	if (sctx->type != FLASH_TYPE) {
+		goto end;
 	}
 
+	const struct slot_flash_backend *fb =
+		(const struct slot_flash_backend *)sctx->backend;
+
+	*address += IFLASH_OFFSET + fb->off;
+	rc = 0;
+end:
 	return rc;
 }
 
@@ -166,103 +104,56 @@ void open_slot(struct sbk_slot *slot)
 {
 	slot->read = read;
 	slot->prog = IS_ENABLED(CONFIG_SBK_IS_SFSL) ? NULL : prog;
-	slot->ioctl = ioctl;
+	slot->address = address;
 	slot->close = close;
+	slot->cmd = NULL;
 }
 
-const struct slot_flash_backend sldr_backend = {
-	.off = GET_PARTITION_OFFSET(sldr_partition),
-	.erase_block_size = GET_PARTITION_EBS(sldr_partition),
-	.write_block_size = GET_PARTITION_WBS(sldr_partition),
-	.dev = GET_PARTITION_DEV(sldr_partition),
+const struct slot_flash_backend ssl_backend = {
+	.off = GET_PARTITION_OFFSET(ssl_partition),
+	.block_size = GET_PARTITION_BS(ssl_partition),
+	.dev = GET_PARTITION_DEV(ssl_partition),
 };
 
-const struct slot_ctx sldr_slot_ctx = {
-	.backend = (void *)&sldr_backend,
-	.size = GET_PARTITION_SIZE(sldr_partition),
+const struct slot_ctx ssl_slot_ctx = {
+	.backend = (void *)&ssl_backend,
+	.size = GET_PARTITION_SIZE(ssl_partition),
 	.type = FLASH_TYPE,
 };
 
-const struct slot_flash_backend productdata_backend = {
-	.off = GET_PARTITION_OFFSET(productdata_partition),
-	.erase_block_size = 0,
-	.write_block_size = 0,
-	.dev = GET_PARTITION_DEV(productdata_partition),
-};
+int sbk_open_ssl_slot(struct sbk_slot *slot)
+{
+	open_slot(slot);
+	slot->ctx = (void *)&ssl_slot_ctx;
+	slot->size = ssl_slot_ctx.size;
+	return 0;
+}
 
-const struct slot_ctx productdata_slot_ctx = {
-	.backend = (void *)&productdata_backend,
-	.size = GET_PARTITION_SIZE(productdata_partition),
-	.type = FLASH_TYPE,
-};
-
-const struct slot_flash_backend image_backends[] = {
+const struct slot_flash_backend image_backend[] = {
 	{
 		.off = GET_PARTITION_OFFSET(image0_partition),
-		.erase_block_size = GET_PARTITION_EBS(image0_partition),
-		.write_block_size = GET_PARTITION_WBS(image0_partition),
+		.block_size = GET_PARTITION_BS(image0_partition),
 		.dev = GET_PARTITION_DEV(image0_partition),
-	},
-	{
-		.off = GET_PARTITION_OFFSET(update0_partition),
-		.erase_block_size = GET_PARTITION_EBS(update0_partition),
-		.write_block_size = GET_PARTITION_WBS(update0_partition),
-		.dev = GET_PARTITION_DEV(update0_partition),
-	},
-	{
-		.off = GET_PARTITION_OFFSET(backup0_partition),
-	 	.erase_block_size = GET_PARTITION_EBS(backup0_partition),
-	 	.write_block_size = GET_PARTITION_WBS(sldr_partition),
-	 	.dev = GET_PARTITION_DEV(backup0_partition)
 	},
 };
 
 const struct slot_ctx image_slot_ctx[] = {
 	{
-		.backend = (void *)&image_backends[0],
+		.backend = (void *)&image_backend[0],
 		.size = GET_PARTITION_SIZE(image0_partition),
 		.type = FLASH_TYPE,
 	},
-	{
-		.backend = (void *)&image_backends[1],
-		.size = GET_PARTITION_SIZE(update0_partition),
-		.type = FLASH_TYPE,
-	},
-	{
-		.backend = (void *)&image_backends[2],
-		.size = GET_PARTITION_SIZE(backup0_partition),
-		.type = FLASH_TYPE,
-	}
 };
-
-int sbk_open_sldr_slot(struct sbk_slot *slot)
-{
-	open_slot(slot);
-	slot->ctx = (void *)&sldr_slot_ctx;
-	return 0;
-}
-
-int sbk_open_productdata_slot(struct sbk_slot *slot)
-{
-	open_slot(slot);
-	slot->prog = NULL;
-	slot->ctx = (void *)&productdata_slot_ctx;
-	return 0;
-}
-
-int sbk_open_pubkey_slot(struct sbk_slot *slot)
-{
-	return sbk_open_sldr_slot(slot);
-}
 
 int sbk_open_image_slot(struct sbk_slot *slot, uint32_t idx)
 {
-	if (idx >= 1) {
+	if (idx >= (sizeof(image_slot_ctx)/sizeof(image_slot_ctx[0]))) {
 		return -EINVAL;
 	}
 
 	open_slot(slot);
-	slot->ctx = (void *)&image_slot_ctx[0];
+	slot->ctx = (void *)&image_slot_ctx[idx];
+	slot->size = image_slot_ctx[idx].size;
 	return 0;
 }
 
@@ -273,25 +164,130 @@ int sbk_open_rimage_slot(struct sbk_slot *slot, uint32_t idx)
 	return rc;
 }
 
+const struct slot_flash_backend update_backend[] = {
+	{
+		.off = GET_PARTITION_OFFSET(update0_partition),
+		.block_size = GET_PARTITION_BS(update0_partition),
+		.dev = GET_PARTITION_DEV(update0_partition),
+	},
+};
+
+const struct slot_ctx update_slot_ctx[] = {
+	{
+		.backend = (void *)&update_backend[0],
+		.size = GET_PARTITION_SIZE(update0_partition),
+		.type = FLASH_TYPE,
+	},
+};
+
 int sbk_open_update_slot(struct sbk_slot *slot, uint32_t idx)
 {
-	if (idx >= 1) {
+	if (idx >= (sizeof(update_slot_ctx)/sizeof(update_slot_ctx[0]))) {
 		return -EINVAL;
 	}
 
 	open_slot(slot);
-	slot->ctx = (void *)&image_slot_ctx[1];
+	slot->ctx = (void *)&update_slot_ctx[idx];
+	slot->size = update_slot_ctx[idx].size;
 	return 0;
+}
+
+struct flash_backup_data {
+	size_t backup_block_size;
+};
+
+const struct flash_backup_data backup_data[] = {
+	{
+		.backup_block_size = GET_PARTITION_OFFSET(update0_partition) -
+				     GET_PARTITION_OFFSET(backup0_partition),
+	},
+};
+
+const struct slot_flash_backend backup_backend[] = {
+	{
+		.off = GET_PARTITION_OFFSET(backup0_partition),
+		.block_size = GET_PARTITION_BS(backup0_partition),
+		.dev = GET_PARTITION_DEV(backup0_partition),
+		.data = (void *)&backup_data[0], 
+	}
+};
+
+const struct slot_ctx backup_slot_ctx[] = {
+	{
+		.backend = (void *)&backup_backend[0],
+		.size = GET_PARTITION_SIZE(backup0_partition),
+		.type = FLASH_TYPE,
+	},
+};
+
+static int cmd_bck(const void *ctx, enum sbk_slot_cmds cmd, void *data,
+		   size_t len)
+{
+	if (cmd != SBK_SLOT_CMD_GET_BACKUP_BLOCK_SIZE) {
+		return -EINVAL;
+	}
+
+	const struct slot_ctx *sctx = (const struct slot_ctx *)ctx;
+	int rc = -ENOTSUP;
+
+	if ((len != sizeof(uint32_t)) || (data == NULL)) {
+		rc = -EINVAL;
+		goto end;
+	}
+
+	if (sctx->type != FLASH_TYPE) {
+		goto end;
+	}
+
+	const struct slot_flash_backend *fb =
+		(const struct slot_flash_backend *)sctx->backend;
+
+	if (fb->data == NULL) {
+		goto end;
+	}
+
+	const struct flash_backup_data *fb_data =
+		(const struct flash_backup_data *)fb->data;
+	size_t *backup_block_size = (size_t *)data;
+
+	*backup_block_size = fb_data->backup_block_size;
+	rc = 0;
+
+end:
+	return rc;
 }
 
 int sbk_open_backup_slot(struct sbk_slot *slot, uint32_t idx)
 {
-	if (idx >= 1) {
+	if (idx >= (sizeof(backup_slot_ctx)/sizeof(backup_slot_ctx[0]))) {
 		return -EINVAL;
 	}
 
 	open_slot(slot);
-	slot->ctx = (void *)&image_slot_ctx[2];
+	slot->cmd = cmd_bck;
+	slot->ctx = (void *)&backup_slot_ctx[idx];
+	slot->size = backup_slot_ctx[idx].size;
+	return 0;
+}
+
+const struct slot_flash_backend productdata_backend = {
+	.off = GET_PARTITION_OFFSET(productdata_partition),
+	.block_size = 0,
+	.dev = GET_PARTITION_DEV(productdata_partition),
+};
+
+const struct slot_ctx productdata_slot_ctx = {
+	.backend = (void *)&productdata_backend,
+	.size = GET_PARTITION_SIZE(productdata_partition),
+	.type = FLASH_TYPE,
+};
+
+int sbk_open_productdata_slot(struct sbk_slot *slot)
+{
+	open_slot(slot);
+	slot->prog = NULL;
+	slot->ctx = (void *)&productdata_slot_ctx;
+	slot->size = productdata_slot_ctx.size;
 	return 0;
 }
 
@@ -321,25 +317,14 @@ int shared_data_prog(const void *ctx, uint32_t off, const void *data, size_t len
 	return 0;
 }
 
-int shared_data_ioctl(const void *ctx, enum sbk_slot_ioctl_cmd cmd, void *data,
-		      size_t len)
-{
-	if (cmd != SBK_SLOT_IOCTL_GET_SIZE) {
-		return -ENOTSUP;
-	}
-
-	uint32_t *size = (uint32_t *)data;
-
-	*size = BL_SHARED_SRAM_SIZE;
-	return 0;
-}
-
 int sbk_open_shareddata_slot(struct sbk_slot *slot)
 {
 	slot->ctx = NULL;
 	slot->read = shared_data_read;
 	slot->prog = shared_data_prog;
-	slot->ioctl = shared_data_ioctl;
+	slot->size = BL_SHARED_SRAM_SIZE;
+	slot->address = NULL;
+	slot->cmd = NULL;
 	slot->close = NULL;
 	return 0;
 }
@@ -352,6 +337,11 @@ void sbk_watchdog_init(void)
 void sbk_watchdog_feed(void)
 {
 
+}
+
+int64_t sbk_uptime_get(void)
+{
+	return k_uptime_get();
 }
 
 /* change this to any other UART peripheral if desired */
@@ -389,5 +379,6 @@ int sbk_shell_init_transport(const struct sbk_shell *sh)
 	sh_data->receive_ctx = (void *)uart_dev;
 	sh_data->receive = serial_receive;
 
+	sbk_shell_prompt(sh);
 	return 0;
 }

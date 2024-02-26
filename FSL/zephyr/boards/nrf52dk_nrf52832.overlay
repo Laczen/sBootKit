@@ -17,8 +17,8 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 
-		sfsl_partition: partition@0 {
-			label = "sFSL";
+		fsl_partition: partition@0 {
+			label = "FSL";
 			reg = <0x00000000 0x00001E00>;
 		};
 
@@ -27,29 +27,29 @@
 			reg = <0x00001E00 0x00000200>;
 		};
 
-		sldr_partition: partition@2000 {
-			label = "sLDR";
-			reg = <0x00002000 0x00004000>;
+		ssl_partition: partition@2000 {
+			label = "SSL";
+			reg = <0x00002000 0x00006000>;
 		};
 
-		storage_partition: partition@4000 {
+		storage_partition: partition@8000 {
 			label = "storage";
-			reg = <0x00004000 0x00003000>;
+			reg = <0x00008000 0x00003000>;
 		};
 
-		image0_partition: partition@7000 {
+		image0_partition: partition@11000 {
 			label = "image0";
-			reg = <0x000007000 0x0001C000>;
+			reg = <0x000011000 0x00037000>;
 		};
 
-		update0_partition: partition@24000 {
+		update0_partition: partition@49000 {
 			label = "update0";
-			reg = <0x00024000 0x0001C000>;
+			reg = <0x00049000 0x00037000>;
 		};
 
-		backup0_partition: partition@23000 {
+		backup0_partition: partition@48000 {
 			label = "backup0";
-			reg = <0x00023000 0x0001C000>;
+			reg = <0x00048000 0x00037000>;
 		};
 
 	};
@@ -60,10 +60,14 @@
 		#address-cells = < 0x1 >;
 		#size-cells = < 0x1 >;
 
-		bl_shared_sram: sram@20000000 {
+		bl_shared_sram: sram@2000FFE0 {
 			compatible = "zephyr,memory-region", "mmio-sram";
-			reg = < 0x20000000 0x0020 >;
+			reg = < 0x2000FFE0 0x0020 >;
 			zephyr,memory-region = "BL_SHARED_SRAM";
 		};
 	};
+};
+
+&sram0 {
+	reg = <0x20000000 0xFFE0>;
 };

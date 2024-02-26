@@ -40,8 +40,9 @@ struct sbk_key {
 };
 
 void set_sbk_private_key(const struct sbk_key *key);
-
 struct sbk_key *sbk_get_private_key(void);
+void set_sbk_public_key(const struct sbk_key *key);
+struct sbk_key *sbk_get_public_key(void);
 
 /* external routines that need to be provided by the os */
 extern void sbk_boot_init(void);                   /* os init routine */
@@ -50,9 +51,10 @@ extern void sbk_boot_prep(unsigned long address);  /* */
 extern void sbk_reboot(void);
 extern void sbk_watchdog_init(void);
 extern void sbk_watchdog_feed(void);
+extern int64_t sbk_uptime_get(void);
 
 /* slot routines that need to be provided by the os */
-extern int sbk_open_sldr_slot(struct sbk_slot *slot);
+extern int sbk_open_ssl_slot(struct sbk_slot *slot);
 extern int sbk_open_productdata_slot(struct sbk_slot *slot);
 extern int sbk_open_shareddata_slot(struct sbk_slot *slot);
 extern int sbk_open_pubkey_slot(struct sbk_slot *slot);

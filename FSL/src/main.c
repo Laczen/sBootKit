@@ -13,14 +13,15 @@
 #include "sbk/sbk_image.h"
 #include "sbk/sbk_log.h"
 
-bool get_booteable_image(const struct sbk_slot *slot, struct sbk_image_info *info)
+bool get_booteable_image(const struct sbk_slot *slot,
+		         struct sbk_image_state_info *info)
 {
 	bool rv = false;
 
-	SBK_IMAGE_STATE_CLR(info->state, SBK_IMAGE_STATE_FULL);
-	sbk_image_sfsl_state(slot, info);
+	sbk_watchdog_feed();
+	sbk_image_fsl_state(slot, info);
 
-	if (SBK_IMAGE_STATE_ISSET(info->state, SBK_IMAGE_STATE_SBOK)) {
+	if (SBK_IMAGE_STATE_ISSET(info->state, SBK_IMAGE_STATE_FSLOK)) {
 		rv = true;
 	}
 
@@ -30,12 +31,11 @@ bool get_booteable_image(const struct sbk_slot *slot, struct sbk_image_info *inf
 int main(void)
 {
 	bool boot = false;
-	struct sbk_tlv_bootinfo bootinfo;
+	struct sbk_bootinfo bootinfo;
 	struct sbk_slot slot;
-	struct sbk_image_info info;
+	struct sbk_image_state_info info;
 
-	SBK_LOG_DBG("Welcome...");
-	SBK_LOG_DBG("Available RAM: %d", CONFIG_SRAM_SIZE);
+	SBK_LOG_DBG("FSL...");
 
 	sbk_watchdog_init();
 	sbk_watchdog_feed();
@@ -48,15 +48,17 @@ int main(void)
 		(void)sbk_slot_close(&slot);	
 	}
 
-	if (!boot) { /* fallback to secure loader */
+	SBK_LOG_DBG("FSL fallback stage 1");
+	if (!boot) { /* fallback to second stage loader */
 		bootinfo.cnt = 0U;
 		bootinfo.idx = 0U;
-		if (sbk_open_sldr_slot(&slot) == 0) {
+		if (sbk_open_ssl_slot(&slot) == 0) {
 			boot = get_booteable_image(&slot, &info);
 			(void)sbk_slot_close(&slot);
 		}
 	}
 
+	SBK_LOG_DBG("FSL fallback stage 2");
 	while (!boot) { /* fallback to first runnable image */
 		if (sbk_open_rimage_slot(&slot, bootinfo.idx) != 0) {
 			break;

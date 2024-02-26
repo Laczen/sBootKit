@@ -39,13 +39,13 @@ struct sbk_crypto_hmac_ctx {
 	size_t chunk_size;
 };
 
-struct sbk_crypto_hash_ctx {
-	const void *hash;
-	size_t hash_size;
+struct sbk_crypto_sha_ctx {
+	const void *sha;
+	size_t sha_size;
 	size_t chunk_size;
 };
 
-struct sbk_crypto_sigp256_ctx {
+struct sbk_crypto_sig_p256_ctx {
 	const void *pubkey;
 	size_t pubkey_size;
 	const void *signature;
@@ -80,7 +80,7 @@ void sbk_crypto_cwipe(void *secret, size_t size);
 int sbk_crypto_compare(const void *s1, const void *s2, size_t len);
 
 /**
- * @brief sbk_crypto_kxch
+ * @brief sbk_crypto_hkdf_sha256_kxch
  *
  * Key exchange
  *
@@ -88,13 +88,13 @@ int sbk_crypto_compare(const void *s1, const void *s2, size_t len);
  * @param keymaterial: returned key material,
  * @param keymaterial_size: expected size of key material,
  */
-void sbk_crypto_kxch(const struct sbk_crypto_kxch_ctx *ctx, void *keymaterial,
-		     size_t keymaterial_size);
+void sbk_crypto_hkdf_sha256_kxch(const struct sbk_crypto_kxch_ctx *ctx,
+				 void *keymaterial, size_t keymaterial_size);
 
 /**
- * @brief sbk_crypto_hmac_vrfy
+ * @brief sbk_crypto_hmac_sha256_vrfy
  *
- * Verify hmac.
+ * Verify hmac_sha256.
  *
  * @param ctx: hmac context
  * @param read_ctx: data read context
@@ -102,26 +102,26 @@ void sbk_crypto_kxch(const struct sbk_crypto_kxch_ctx *ctx, void *keymaterial,
  * @return 0 if valid, nonzero otherwise
  *
  */
-int sbk_crypto_hmac_vrfy(const struct sbk_crypto_hmac_ctx *hmac_ctx,
-			 const struct sbk_crypto_read_ctx *read_ctx,
-			 size_t msg_len);
+int sbk_crypto_hmac_sha256_vrfy(const struct sbk_crypto_hmac_ctx *hmac_ctx,
+				const struct sbk_crypto_read_ctx *read_ctx,
+				size_t msg_len);
 
 /**
- * @brief sbk_crypto_hash_vrfy
+ * @brief sbk_crypto_sha256_vrfy
  *
- * Verify hash.
+ * Verify sha256.
  *
- * @param ctx: hash context
+ * @param ctx: sha context
  * @param read_ctx: data read context
  * @param msg_len: length of the message to verify
  * @return 0 if valid, nonzero otherwise
  */
-int sbk_crypto_hash_vrfy(const struct sbk_crypto_hash_ctx *hash_ctx,
-			 const struct sbk_crypto_read_ctx *read_ctx,
-			 size_t msg_len);
+int sbk_crypto_sha256_vrfy(const struct sbk_crypto_sha_ctx *sha_ctx,
+			   const struct sbk_crypto_read_ctx *read_ctx,
+			   size_t msg_len);
 
 /**
- * @brief sbk_crypto_sigp256_vrfy
+ * @brief sbk_crypto_sig_p256_vrfy
  *
  * Verify p256 signature.
  *
@@ -130,9 +130,9 @@ int sbk_crypto_hash_vrfy(const struct sbk_crypto_hash_ctx *hash_ctx,
  * @param msg_len: length of the message to verify
  * @return 0 if valid, nonzero otherwise
  */
-int sbk_crypto_sigp256_vrfy(const struct sbk_crypto_sigp256_ctx *sig_ctx,
-			    const struct sbk_crypto_read_ctx *read_ctx,
-			    size_t msg_len);
+int sbk_crypto_sig_p256_vrfy(const struct sbk_crypto_sig_p256_ctx *sig_ctx,
+			     const struct sbk_crypto_read_ctx *read_ctx,
+			     size_t msg_len);
 
 size_t sbk_crypto_ciphered_read_km_size(void);
 

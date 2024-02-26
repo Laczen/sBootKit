@@ -32,10 +32,10 @@ from Crypto.Protocol.KDF import HKDF
 from Crypto.Cipher import ChaCha20
 
 SBK_IMAGE_INFO_TAG = 0x8000
-SBK_IMAGE_TLVF_TAG = 0x80FC
-SBK_IMAGE_SFSL_TAG = 0x80FD
-SBK_IMAGE_PUBK_TAG = 0x80FE
-SBK_IMAGE_SLDR_TAG = 0x80FF
+SBK_IMAGE_TLVF_TAG = 0x80BF
+SBK_IMAGE_SSLC_TAG0 = 0x80C0
+SBK_IMAGE_SSLI_TAG0 = 0x80D0
+SBK_IMAGE_FSLI_TAG0 = 0x80F0
 SBK_IMAGE_FLAG_TEST = 0x00000001
 SBK_IMAGE_FLAG_ENCRYPTED = 0x00000010
 SBK_IMAGE_FLAG_ZLIB = 0x00000020
@@ -56,9 +56,11 @@ STRUCT_ENDIAN_DICT = {
 }
 
 class Image():
-    def __init__(self, align = 1, hdrsize = None, version = 0, image_dep = None,
-                 product_dep = None, endian = 'little', type = 'image'):
+    def __init__(self, align = 1, hdrsize = None, offset = None, version = 0,
+                 image_dep = None, product_dep = None, endian = 'little',
+                 type = 'image'):
         self.hdrsize = hdrsize
+        self.offset = offset
         self.align = align
         self.version = version
         self.payload = []
@@ -99,7 +101,7 @@ class Image():
 
         ih = IntelHex(path)
         self.payload = ih.tobinarray()
-        self.offset = ih.minaddr()
+        self.image_address = ih.minaddr()
 
         # Padding the payload to aligned size
         padlen = self.align - len(self.payload) % self.align
@@ -122,10 +124,12 @@ class Image():
             raise Exception("Only hex input file supported")
 
         h = IntelHex()
+        if self.offset is None:
+            self.offset = self.image_address
         h.frombytes(bytes=self.payload, offset = self.offset)
         h.tofile(path, 'hex')
 
-    def add_meta(self, sldr_key, sfsl_key, inclpk):
+    def add_meta(self, signkey, privkey):
         
         image_dep_tag = []
         for entry in self.image_dep:
@@ -158,7 +162,7 @@ class Image():
             self.version.major or 0, self.version.minor or 0, self.version.revision or 0,
             self.flags,
             len(self.payload) - self.hdrsize,
-            self.offset + self.hdrsize,
+            self.image_address + self.hdrsize,
             self.hdrsize,
             image_dep_tag[0],
             product_dep_tag[0],
@@ -214,45 +218,33 @@ class Image():
             )
             n = n + 1
 
-        # calculate pubkey hash array
-        if inclpk:
-            e = STRUCT_ENDIAN_DICT[self.endian]
-            pkhash_meta_fmt = (e +
-                'HH' # rec_tag + rec_len
-            )
-            pubkeyhasharray = struct.pack(pkhash_meta_fmt,
-                SBK_IMAGE_PUBK_TAG,
-                struct.calcsize(pkhash_meta_fmt) + 32 * len(sfsl_key)
-            )
-            pkhash_meta_fmt = (e +
-                '32s' # pubkey hash
-            )
-            for key in sfsl_key:
-                pubkeyhash = key.p256_pubkeyhash()
-                pubkeyhasharray += struct.pack(pkhash_meta_fmt, pubkeyhash)
-                #print(' '.join(format(x, '02x') for x in pubkeyhash))
-
-        # sfsl format
+        # sslc format
         e = STRUCT_ENDIAN_DICT[self.endian]
-        sfsl_meta_fmt = (e +
+        sslc_meta_fmt = (e +
             'HH' +  # rec_tag + rec_len
-            '64s' +    # pubkey
-            '64s'      # signature
+            '16s'   # salt
         )
 
-        # sldr format
+        # ssli format
         e = STRUCT_ENDIAN_DICT[self.endian]
-        sldr_meta_fmt = (e +
+        ssli_meta_fmt = (e +
             'HH' +  # rec_tag + rec_len
-            '16s' +    # salt
-            '32s'      # hmac
+            '64s'   # signature
+        )
+
+        # fsli format
+        e = STRUCT_ENDIAN_DICT[self.endian]
+        fsli_meta_fmt = (e +
+            'HH' +  # rec_tag + rec_len
+            '32s'   # hash
         )
 
         filler_size = self.hdrsize
         filler_size -= len(info)
-        filler_size -= len(pubkeyhasharray)
-        filler_size -= struct.calcsize(sldr_meta_fmt)
-        filler_size -= struct.calcsize(sfsl_meta_fmt)
+        if privkey is not None:
+            filler_size -= struct.calcsize(sslc_meta_fmt)
+        filler_size -= struct.calcsize(ssli_meta_fmt)
+        filler_size -= struct.calcsize(fsli_meta_fmt)
 
         if (filler_size < 0):
             raise Exception("Header size to small to fit meta data")
@@ -269,41 +261,41 @@ class Image():
             )
             info += bytearray([0x55] * (filler_size - struct.calcsize(filler_meta_fmt)))
       
-        sfsl_pubkey = sfsl_key[0].p256_pubkey()
-        sfsl_sig = sfsl_key[0].p256_sign(info)
-        info += struct.pack(sfsl_meta_fmt,
-            SBK_IMAGE_SFSL_TAG, struct.calcsize(sfsl_meta_fmt),
-            sfsl_pubkey,
-            sfsl_sig,
-        )
-
-        if inclpk:
-            info += pubkeyhasharray
-
-        sldr_hmac = sldr_key.rpk_sign(self.salt, SBK_IMAGE_HMAC_CONTEXT, info)
-        info += struct.pack(sldr_meta_fmt,
-            SBK_IMAGE_SLDR_TAG, struct.calcsize(sldr_meta_fmt),
+        if privkey is not None:
+            info += struct.pack(sslc_meta_fmt,
+            SBK_IMAGE_SSLC_TAG0, struct.calcsize(sslc_meta_fmt),
             self.salt,
-            sldr_hmac,
         )
 
+        ssli_pubkey = signkey.p256_pubkey()
+        ssli_sig = signkey.p256_sign(info)
+        info += struct.pack(ssli_meta_fmt,
+            SBK_IMAGE_SSLI_TAG0, struct.calcsize(ssli_meta_fmt),
+            ssli_sig,
+        )
+     
+        ssli_hash = sbktcrypto.sha256(info)
+        info += struct.pack(fsli_meta_fmt,
+            SBK_IMAGE_FSLI_TAG0, struct.calcsize(fsli_meta_fmt),
+            ssli_hash,
+        )
         self.payload[:self.hdrsize] = info
         return len(info)
 
     def show(self, data):
         print('\\x' + '\\x'.join(format(x, '02x') for x in data))
 
-    def create(self, sfslkey, sldrkey, test, encrypt, inclpk):
+    def create(self, signkey, privkey, test):
 
-        if encrypt:
+        if privkey is not None:
             self.flags |= SBK_IMAGE_FLAG_ENCRYPTED
 
         if test:
             self.flags |= SBK_IMAGE_FLAG_TEST
 
-        if encrypt:
-            self.payload[self.hdrsize:]=sldrkey.rpk_encrypt(self.salt,
+        if privkey is not None:
+            self.payload[self.hdrsize:]=privkey.rpk_encrypt(self.salt,
                 SBK_IMAGE_CIPH_CONTEXT, self.payload[self.hdrsize:])
             self.chash = sbktcrypto.sha256(self.payload[self.hdrsize:])
 
-        self.add_meta(sldrkey, sfslkey, inclpk)
+        self.add_meta(signkey, privkey)

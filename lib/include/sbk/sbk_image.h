@@ -12,43 +12,104 @@ extern "C" {
 
 #include <stdint.h>
 
-#define SBK_IMAGE_WBS 64
+#define SBK_IMAGE_WBS		64
+#define SBK_SHA256_SIZE		32
+#define SBK_P256_SIGN_SIZE	64
+#define SBK_P256_PUBK_SIZE	64
+#define SBK_ED25519_SIGN_SIZE	64
+#define SBK_ED25519_PUBK_SIZE	32
+#define SBK_CIPHER_SALT_SIZE	16
+
+#define SBK_IMAGE_CIPH_CONTEXT "SBK CIPH"
+
+/* Definitions for image tlvs */
+#define SBK_IMAGE_INFO_TAG	0x8000 /* Image info tag */
+#define SBK_IMAGE_TLVF_TAG	0x80BF /* Image tlv filler tag */
+#define SBK_IMAGE_SSLC_TAG0	0x80C0 /* Second Stage Loader cipher tag */
+#define SBK_IMAGE_SSLI_TAG0	0x80D0 /* Second Stage Loader integrity tag */
+#define SBK_IMAGE_FSLI_TAG0	0x80F0 /* First Stage Loader integrity tag */
+#define SBK_IMAGE_LEND_TAG	0x0000 /* List end tag */
+
+#define SBK_IMAGE_CIPK_SIZE	44 /* Size of the derived key for cipher */
 
 #define SBK_IMAGE_FLAG_TEST      0x00000001 /* Test image */
-#define SBK_IMAGE_FLAG_CIPH      0x00000010 /* Ciphered image */
 #define SBK_IMAGE_FLAG_ZLIB      0x00000020 /* ZLIB compr. image */
 #define SBK_IMAGE_FLAG_VCDIFF    0x00000040 /* VCDIFF image */
 
-#define SBK_IMAGE_HMAC_CONTEXT "SBK HMAC"
-#define SBK_IMAGE_CIPH_CONTEXT "SBK CIPH"
+struct __attribute__((packed)) sbk_image_info { /* image info */
+	uint32_t image_sequence_number;   /* image sequence number */
+	struct sbk_version image_version; /* image version */
+	uint32_t image_flags;             /* image flags (contains alignment) */
+	uint32_t image_size;              /* image size */
+	uint32_t image_start_address;     /* image destination address */
+	uint16_t image_offset;            /* image offset in package */
+	uint16_t idep_tag;                /* first tag with image dependency */
+	uint16_t pdep_tag;                /* first tag with product dependency */
+	uint16_t other_tag;
+	uint8_t sha256[SBK_SHA256_SIZE]; /* hash */
+};
+
+struct __attribute__((packed)) sbk_image_dep_info { /* image dependency */
+	struct sbk_version_range vrange;
+	uint32_t image_start_address; /* dependent image start address */
+	uint16_t next_tag;
+	uint16_t pad16;
+};
+
+struct __attribute__((packed)) sbk_product_dep_info { /* prod. dependency */
+	struct sbk_version_range vrange;
+	uint8_t guid[SBK_PRODUCT_GUID_SIZE]; /* product guid */
+	uint16_t next_tag;
+	uint16_t pad16;
+};
+
+struct __attribute__((packed)) sbk_image_ssl_cipher0 {
+	uint8_t salt[SBK_CIPHER_SALT_SIZE]; /* cipher salt */
+};
+
+struct __attribute__((packed)) sbk_image_ssl_p256_int {
+	uint8_t sign[SBK_P256_SIGN_SIZE];   /* ssl p256 signature */
+};
+
+struct __attribute__((packed)) sbk_image_ssl_ed25519_int {
+	uint8_t sign[SBK_ED25519_SIGN_SIZE];   /* ssl ed25519 signature */
+};
+
+struct __attribute__((packed)) sbk_image_fsl_int {
+	uint8_t sha256[SBK_SHA256_SIZE]; /* fsl sha of header */
+};
 
 #define SBK_IMAGE_FLAG_ISSET(state, flag) (((state) & (flag)) == flag)
 
 #define SBK_IMAGE_STATE_FULL 0xFFFFFFFF /* All flags */
 #define SBK_IMAGE_STATE_IINF 0x00000001 /* Image info available */
-#define SBK_IMAGE_STATE_TEST 0x00000002 /* Test image */
-#define SBK_IMAGE_STATE_INRS 0x00000004 /* Image in run slot */
-#define SBK_IMAGE_STATE_PDEP 0x00000008 /* Image dependency ok */
+#define SBK_IMAGE_STATE_INDS 0x00000002 /* Image in destination slot */
+#define SBK_IMAGE_STATE_IDEP 0x00000004 /* Image image dependency ok */
+#define SBK_IMAGE_STATE_PDEP 0x00000008 /* Image product dependency ok */
 
-#define SBK_IMAGE_STATE_BAUT 0x00000010 /* Boot authentication ok */
-#define SBK_IMAGE_STATE_LAUT 0x00000020 /* Loader authentication ok */
-#define SBK_IMAGE_STATE_VHSH 0x00000040 /* Valid image hash */
+#define SBK_IMAGE_STATE_FSLI 0x00000010 /* first stage loader integrity ok */
+#define SBK_IMAGE_STATE_SSLI 0x00000020 /* second stage loader integrity ok */
+#define SBK_IMAGE_STATE_IMGI 0x00000040 /* image integrity ok */
 
-#define SBK_IMAGE_STATE_IDEP 0x00000100 /* Image image dependency ok */
+#define SBK_IMAGE_STATE_TEST 0x00000100 /* Test image */
 
-#define SBK_IMAGE_STATE_SBOK                                                    \
+#define SBK_IMAGE_STATE_FSLOK                                                   \
 	(SBK_IMAGE_STATE_IINF | SBK_IMAGE_STATE_PDEP | SBK_IMAGE_STATE_IDEP |   \
-	 SBK_IMAGE_STATE_INRS | SBK_IMAGE_STATE_BAUT | SBK_IMAGE_STATE_VHSH)
+	 SBK_IMAGE_STATE_INDS | SBK_IMAGE_STATE_FSLI | SBK_IMAGE_STATE_IMGI)
 
-#define SBK_IMAGE_STATE_LDOK                                                    \
+#define SBK_IMAGE_STATE_SSLOK                                                   \
 	(SBK_IMAGE_STATE_IINF | SBK_IMAGE_STATE_PDEP | SBK_IMAGE_STATE_IDEP |   \
-	 SBK_IMAGE_STATE_LAUT | SBK_IMAGE_STATE_VHSH)
+	 SBK_IMAGE_STATE_SSLI | SBK_IMAGE_STATE_IMGI)
+
+#define SBK_IMAGE_STATE_SSL_DU_OK                                               \
+	(SBK_IMAGE_STATE_IINF | SBK_IMAGE_STATE_PDEP | SBK_IMAGE_STATE_IDEP |   \
+	 SBK_IMAGE_STATE_SSLI)
 
 #define SBK_IMAGE_STATE_SET(state, flag)   ((state) |= (flag))
 #define SBK_IMAGE_STATE_CLR(state, flag)   ((state) &= ~(flag))
 #define SBK_IMAGE_STATE_ISSET(state, flag) (((state) & (flag)) == flag)
 
-struct sbk_image_info {
+struct sbk_image_state_info {
 	uint32_t state;
 	uint32_t image_start_address;
 	uint32_t image_sequence_number;
@@ -57,22 +118,44 @@ struct sbk_image_info {
 struct sbk_slot;
 
 /**
- * @brief sbk_image_sfsl_state
+ * @brief Enumerate swap modes
  *
- * Retrieve the secure first stage loader state of an image in a slot
+ */
+enum sbk_image_swap_modes {
+	SBK_IMAGE_SWAP_MODE_NONE = 0,		/* No swap needed */
+	SBK_IMAGE_SWAP_MODE_UPDATE = 1,		/* Update image */
+	SBK_IMAGE_SWAP_MODE_RESTORE = 2,	/* Restore backup */
+	SBK_IMAGE_SWAP_MODE_SWAP = 3,		/* Swap image using backup */
+};
+
+struct sbk_image_swap_state {
+	struct sbk_slot *img;
+	struct sbk_slot *upd;
+	struct sbk_slot *bck;
+	enum sbk_image_swap_modes mode;
+	size_t block_size;
+	uint32_t offset;
+	bool bck_done;
+};
+
+/**
+ * @brief sbk_image_fsl_state
+ *
+ * Retrieve the first stage loader state of an image in a slot
  *
  * @param slot: the slot to evaluate
  * @param st: image state
  */
-void sbk_image_sfsl_state(const struct sbk_slot *slot,
-			  struct sbk_image_info *info);
+void sbk_image_fsl_state(const struct sbk_slot *slot,
+			 struct sbk_image_state_info *state_info);
 
-void sbk_image_sldr_state(const struct sbk_slot *slot,
-			  struct sbk_image_info *info);
+void sbk_image_ssl_state(const struct sbk_slot *slot,
+			  struct sbk_image_state_info *state_info);
 
-bool sbk_image_sfsl_sldr_needed(uint32_t *idx);
+bool sbk_image_ssl_swap(uint32_t idx);
 
-bool sbk_image_sfsl_swap(uint32_t idx);
+int sbk_image_read(const struct sbk_slot *slot, uint32_t off, void *data,
+		   size_t len);
 
 // struct sbk_stream_image_ctx {
 // 	struct sbk_slot *slt;

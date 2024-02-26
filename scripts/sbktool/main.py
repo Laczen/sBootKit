@@ -61,12 +61,13 @@ def load_key(keyfile):
     passwd = getpass.getpass("Enter key passphrase: ").encode('utf-8')
     return sbktcrypto.load(keyfile, passwd)
 
-@click.option('-k', '--key', metavar='filename', required=True)
-@click.command(help='Generate key to include in sFSL (pub) or sLDR')
-def geninclude(key):
-    key = load_key(key)
-    if key is not None:
-        key.emit()
+@click.option('-k', '--keys', metavar='filename', required=True, multiple=True)
+@click.command(help='Generate key to include in SSL')
+def geninclude(keys):
+    for key in keys:
+        key = load_key(key)
+        if key is not None:
+            key.emit()
 
 def validate_version(ctx, param, value):
     try:
@@ -147,6 +148,8 @@ class BasedIntParamType(click.ParamType):
 @click.option('-hs', '--hdrsize', required = True, type = BasedIntParamType(),
               help = 'Size of the header that was prepended during image \
                       generation')
+@click.option('-la', '--address', required = False, type = BasedIntParamType(),
+              help = 'Specify the hex-file start address')
 @click.option('-s', '--ssnr', type = int, help = 'Security sequence number')
 @click.option('-v', '--version', callback = validate_version, type = str,
               default = "0")
@@ -156,37 +159,31 @@ class BasedIntParamType(click.ParamType):
 @click.option('-dep','--dependency', multiple=True, type = str,
               callback = convert_image_dep,
               help = 'Image dependency, image address:version range')
-@click.option('-fk','--fslkey', multiple= True, metavar = 'filename', required = True,
-              help = 'First stage loader authentication using the provided key')
-@click.option('-ipkh', '--inclpk', is_flag = True, 
-              help = 'include pubkey hashes in image meta data')
-@click.option('-lk','--ldrkey', metavar = 'filename', required = True,
-              help = 'Loader authentication/encryption using the provided key')
+@click.option('-sk','--signkey', metavar = 'filename', required = True,
+              help = 'Key used to create a signature')
+@click.option('-pk', '--privkey', metavar = 'filename', required = False, 
+              help = 'Key used to create encryption')
 @click.option('-t','--test', is_flag = True, help = 'create test image')
-@click.option('-e','--encrypt', is_flag = True, help = 'create encrypted image')
 @click.command(help='''Create a image for use with sBootKit\n
                INFILE and OUTFILE are of type hex''')
-def create(align, hdrsize, ssnr, version, product, dependency, fslkey, inclpk,
-           ldrkey, test, encrypt, infile, outfile, endian):
-    fslkeylist = []
-    for entry in fslkey:
-        key = load_key(entry)
-        if not key is None:
-            fslkeylist.append(key)
+def create(align, hdrsize, address, ssnr, version, product, dependency, signkey,
+           privkey, test, infile, outfile, endian):
+    signkey = load_key(signkey)
+    if (privkey is not None):
+        privkey = load_key(privkey)
 
-    fslkey = fslkeylist
-    ldrkey = load_key(ldrkey)
-    if (fslkey is not None) and (ldrkey is not None):
+    if (signkey is not None):
         img = image.Image(hdrsize = hdrsize, version = decode_version(version),
                           product_dep = product, image_dep = dependency,
-                          endian = endian, align = align, type = type)
+                          endian = endian, align = align, offset = address,
+                          type = type)
         img.load(infile)
-        img.create(fslkey, ldrkey, test, encrypt, inclpk)
+        img.create(signkey, privkey, test)
         if outfile is not None:
             img.save(outfile)
 
     else:
-        print("Wrong bootkey or loadkey provided")
+        print("Wrong signkey provided")
 
 @click.argument('file')
 @click.option('-d', '--device', type = str, default = None,

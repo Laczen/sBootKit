@@ -6,6 +6,8 @@
 
 #include "../app.overlay"
 
+/delete-node/ &sram0;
+
 &flash0 {
 	/delete-property/ erase-block-size;
 	erase-block-size = <DT_SIZE_K(128)>;
@@ -15,8 +17,8 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 
-		sfsl_partition: partition@0 {
-			label = "sFSL";
+		fsl_partition: partition@0 {
+			label = "FSL";
 			reg = <0x00000000 0x00008000>;
 		};
 
@@ -25,8 +27,8 @@
 			reg = <0x00007E00 0x00000200>;
 		};
 
-		sldr_partition: partition@10000 {
-			label = "sLDR";
+		ssl_partition: partition@10000 {
+			label = "SSL";
 			reg = <0x00010000 0x00010000>;
 		};
 
@@ -53,6 +55,11 @@
 };
 
 / {
+	sram0: memory@2001E000 {
+		compatible = "mmio-sram";
+		reg = <0x2001E000 0x00002000>;
+	};
+
 	bl_shared_ram {
 		#address-cells = < 0x1 >;
 		#size-cells = < 0x1 >;

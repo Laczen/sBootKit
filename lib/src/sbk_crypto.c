@@ -41,8 +41,8 @@ int sbk_crypto_compare(const void *s1, const void *s2, size_t len)
 }
 
 #ifdef CONFIG_SBK_MINCRYPT
-void sbk_crypto_kxch(const struct sbk_crypto_kxch_ctx *ctx, void *keymaterial,
-		     size_t keymaterial_size)
+void sbk_crypto_hkdf_sha256_kxch(const struct sbk_crypto_kxch_ctx *ctx,
+				 void *keymaterial, size_t keymaterial_size)
 {
 	uint8_t prk[crypto_hkdf_sha256_prk_size()];
 
@@ -54,17 +54,17 @@ void sbk_crypto_kxch(const struct sbk_crypto_kxch_ctx *ctx, void *keymaterial,
 	sbk_crypto_cwipe(prk, sizeof(prk));
 }
 #else
-void sbk_crypto_kxch(const struct sbk_crypto_kxch_ctx *ctx, void *keymaterial,
-		     size_t keymaterial_size)
+void sbk_crypto_hkdf_sha256_kxch(const struct sbk_crypto_kxch_ctx *ctx,
+				 void *keymaterial, size_t keymaterial_size)
 {
 }
 #endif
 
 #ifdef CONFIG_SBK_MINCRYPT
-static int sbk_crypto_hmac_calc(void *hmac,
-				const struct sbk_crypto_hmac_ctx *hmac_ctx,
-				const struct sbk_crypto_read_ctx *read_ctx,
-				size_t msg_len)
+static int sbk_crypto_hmac_sha256(void *hmac,
+				  const struct sbk_crypto_hmac_ctx *hmac_ctx,
+				  const struct sbk_crypto_read_ctx *read_ctx,
+				  size_t msg_len)
 {
 	const size_t chunksz = hmac_ctx->chunk_size;
 	uint8_t state[crypto_hmac_sha256_state_size()];
@@ -92,19 +92,19 @@ end:
 	return rc;
 }
 #else
-static int sbk_crypto_hmac_calc(void *hmac,
-				const struct sbk_crypto_hmac_ctx *hmac_ctx,
-				const struct sbk_crypto_read_ctx *read_ctx,
-				size_t msg_len)
+static int sbk_crypto_hmac_sha256(void *hmac,
+				  const struct sbk_crypto_hmac_ctx *hmac_ctx,
+				  const struct sbk_crypto_read_ctx *read_ctx,
+				  size_t msg_len)
 {
 	return -SBK_EC_EFAULT;
 }
 #endif
 
 #ifdef CONFIG_SBK_MINCRYPT
-int sbk_crypto_hmac_vrfy(const struct sbk_crypto_hmac_ctx *hmac_ctx,
-			 const struct sbk_crypto_read_ctx *read_ctx,
-			 size_t msg_len)
+int sbk_crypto_hmac_sha256_vrfy(const struct sbk_crypto_hmac_ctx *hmac_ctx,
+			 	const struct sbk_crypto_read_ctx *read_ctx,
+			 	size_t msg_len)
 {
 	if (hmac_ctx->hmac_size > crypto_hmac_sha256_block_size()) {
 		return -SBK_EC_EFAULT;
@@ -113,7 +113,7 @@ int sbk_crypto_hmac_vrfy(const struct sbk_crypto_hmac_ctx *hmac_ctx,
 	uint8_t hmac[crypto_hmac_sha256_block_size()];
 	int rc;
 
-	rc = sbk_crypto_hmac_calc(hmac, hmac_ctx, read_ctx, msg_len);
+	rc = sbk_crypto_hmac_sha256(hmac, hmac_ctx, read_ctx, msg_len);
 	if (rc != 0) {
 		goto end;
 	}
@@ -124,21 +124,21 @@ end:
 	return rc;
 }
 #else
-int sbk_crypto_hmac_vrfy(const struct sbk_crypto_hmac_ctx *hmac_ctx,
-			 const struct sbk_crypto_read_ctx *read_ctx,
-			 size_t msg_len)
+int sbk_crypto_hmac_sha256_vrfy(const struct sbk_crypto_hmac_ctx *hmac_ctx,
+				const struct sbk_crypto_read_ctx *read_ctx,
+				size_t msg_len)
 {
 	return -SBK_EC_EFAULT;
 }
 #endif
 
 #ifdef CONFIG_SBK_MINCRYPT
-static int sbk_crypto_hash_calc(void *hash,
-				const struct sbk_crypto_hash_ctx *hash_ctx,
-				const struct sbk_crypto_read_ctx *read_ctx,
-				size_t msg_len)
+static int sbk_crypto_sha256(void *sha256,
+			     const struct sbk_crypto_sha_ctx *sha_ctx,
+			     const struct sbk_crypto_read_ctx *read_ctx,
+			     size_t msg_len)
 {
-	const size_t chunksz = hash_ctx->chunk_size;
+	const size_t chunksz = sha_ctx->chunk_size;
 	uint8_t state[crypto_sha256_state_size()];
 	uint8_t buf[SBK_MAX(chunksz, crypto_sha256_block_size())];
 	uint32_t off = 0U;
@@ -157,89 +157,89 @@ static int sbk_crypto_hash_calc(void *hash,
 		off += rdlen;
 	}
 
-	crypto_sha256_final(hash, state);
+	crypto_sha256_final(sha256, state);
 end:
 	sbk_crypto_cwipe(state, sizeof(state));
 	sbk_crypto_cwipe(buf, sizeof(buf));
 	return rc;
 }
 #else
-static int sbk_crypto_hash_calc(void *hash,
-				const struct sbk_crypto_hash_ctx *hash_ctx,
-				const struct sbk_crypto_read_ctx *read_ctx,
-				size_t msg_len)
+static int sbk_crypto_sha256(void *sha256,
+			     const struct sbk_crypto_sha_ctx *sha_ctx,
+			     const struct sbk_crypto_read_ctx *read_ctx,
+			     size_t msg_len)
 {
 	return 0;
 }
 #endif
 
 #ifdef CONFIG_SBK_MINCRYPT
-int sbk_crypto_hash_vrfy(const struct sbk_crypto_hash_ctx *hash_ctx,
-			 const struct sbk_crypto_read_ctx *read_ctx,
-			 size_t msg_len)
+int sbk_crypto_sha256_vrfy(const struct sbk_crypto_sha_ctx *sha_ctx,
+			   const struct sbk_crypto_read_ctx *read_ctx,
+			   size_t msg_len)
 {
-	if (hash_ctx->hash_size > crypto_sha256_block_size()) {
+	if (sha_ctx->sha_size > crypto_sha256_block_size()) {
 		return -SBK_EC_EFAULT;
 	}
 
-	uint8_t hash[crypto_sha256_block_size()];
+	uint8_t sha256[crypto_sha256_block_size()];
 	int rc;
 
-	rc = sbk_crypto_hash_calc(hash, hash_ctx, read_ctx, msg_len);
+	rc = sbk_crypto_sha256(sha256, sha_ctx, read_ctx, msg_len);
 	if (rc != 0) {
 		goto end;
 	}
 
-	rc = sbk_crypto_compare(hash, hash_ctx->hash, hash_ctx->hash_size);
+	rc = sbk_crypto_compare(sha256, sha_ctx->sha, sha_ctx->sha_size);
 end:
-	sbk_crypto_cwipe(hash, sizeof(hash));
+	sbk_crypto_cwipe(sha256, sizeof(sha256));
 	return rc;
 }
 #else
-int sbk_crypto_hash_vrfy(const struct sbk_crypto_hash_ctx *hash_ctx,
-			 const struct sbk_crypto_read_ctx *read_ctx,
-			 size_t msg_len)
+int sbk_crypto_sha256_vrfy(const struct sbk_crypto_sha_ctx *sha_ctx,
+			   const struct sbk_crypto_read_ctx *read_ctx,
+			   size_t msg_len)
 {
 	return -SBK_EC_EFAULT;
 }
 #endif
 
 #if defined(CONFIG_SBK_MINCRYPT) && defined(CONFIG_SBK_P256M)
-int sbk_crypto_sigp256_vrfy(const struct sbk_crypto_sigp256_ctx *sig_ctx,
-			    const struct sbk_crypto_read_ctx *read_ctx,
-			    size_t msg_len)
+int sbk_crypto_sig_p256_vrfy(const struct sbk_crypto_sig_p256_ctx *sig_ctx,
+			     const struct sbk_crypto_read_ctx *read_ctx,
+			     size_t msg_len)
 {
 	if ((sig_ctx->pubkey_size != 64) || (sig_ctx->signature_size != 64)) {
 		return -SBK_EC_EFAULT;
 	}
 
-	uint8_t hash[crypto_sha256_block_size()];
-	const struct sbk_crypto_hash_ctx hash_ctx = {
-		.hash = NULL,
-		.hash_size = crypto_sha256_block_size(),
+	uint8_t sha256[crypto_sha256_block_size()];
+	const struct sbk_crypto_sha_ctx sha_ctx = {
+		.sha = NULL,
+		.sha_size = crypto_sha256_block_size(),
 		.chunk_size = crypto_sha256_block_size(),
 	};
 	int rc;
 
-	rc = sbk_crypto_hash_calc(hash, &hash_ctx, read_ctx, msg_len);
+	rc = sbk_crypto_sha256(sha256, &sha_ctx, read_ctx, msg_len);
 	if (rc != 0) {
 		goto end;
 	}
 
-	rc = p256_ecdsa_verify(sig_ctx->signature, sig_ctx->pubkey, hash,
-			       sizeof(hash));
+	rc = p256_ecdsa_verify(sig_ctx->signature, sig_ctx->pubkey, sha256,
+			       sizeof(sha256));
 	if (rc != P256_SUCCESS) {
 		rc = -SBK_EC_EFAULT;
 	}
 
 end:
-	sbk_crypto_cwipe(hash, sizeof(hash));
+	sbk_crypto_cwipe(sha256, sizeof(sha256));
 	return rc;
 }
 #else
-int sbk_crypto_sigp256_vrfy(const struct sbk_crypto_sigp256_ctx *sig_ctx,
-			    const struct sbk_crypto_read_ctx *read_ctx,
-			    size_t msg_len)
+int sbk_crypto_sig_p256_vrfy(const struct sbk_crypto_sig_p256_ctx *sig_ctx,
+			     const struct sbk_crypto_read_ctx *read_ctx,
+			     size_t msg_len)
 {
 	return -SBK_EC_EFAULT;
 }

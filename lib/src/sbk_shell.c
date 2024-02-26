@@ -69,12 +69,6 @@ static void sbk_shell_echo(const struct sbk_shell *sh, char c)
 	sbk_shell_print(sh, str);
 }
 
-static void sbk_shell_prompt(const struct sbk_shell *sh)
-{
-	sbk_shell_print(sh, "\r\n");
-	sbk_shell_print(sh, CONFIG_SBK_SHELL_PROMPT);
-}
-
 static bool sbk_shell_cmd_buffer_full(const struct sbk_shell *sh)
 {
 	return sh->data->cmd_buf_pos >= CONFIG_SBK_SHELL_CMD_BUFSIZE;
@@ -134,36 +128,47 @@ static void sbk_shell_process(const struct sbk_shell *sh)
 	sbk_shell_prompt(sh);
 }
 
-void sbk_shell_receive(const struct sbk_shell *sh)
+void sbk_shell_prompt(const struct sbk_shell *sh)
+{
+	if (sh->data->bypass != NULL) {
+		return;
+	}
+
+	sbk_shell_print(sh, "\r\n");
+	sbk_shell_print(sh, CONFIG_SBK_SHELL_PROMPT);
+}
+
+bool sbk_shell_receive(const struct sbk_shell *sh)
 {
 	struct sbk_shell_data *sh_data = sh->data;
-
+	size_t cnt = 0;
+	
 	if (sh_data->receive == NULL) {
-		return;
+		return false;
 	}
 
 	if (sh_data->bypass != NULL) {
 		unsigned char buf[CONFIG_SBK_SHELL_BYPASS_BUFSIZE];
-		size_t bp = 0U;
-
-		while (sh_data->receive(sh_data->receive_ctx, &buf[bp]) == 0) {
-			bp++;
+		
+		while (sh_data->receive(sh_data->receive_ctx, &buf[cnt]) == 0) {
+			cnt++;
 		}
 
-		if (bp == 0U) {
-			return;
+		if (cnt == 0U) {
+			return false;
 		}
 
-		if (sh_data->bypass(sh, buf, bp) != 0) {
+		if (sh_data->bypass(sh, buf, cnt) != 0) {
 			sbk_shell_set_bypass(sh, NULL);
 		}
 
-		return;
+		return true;
 	}
 
 	char c;
 
 	while (sh_data->receive(sh_data->receive_ctx, &c) == 0) {
+		cnt++;
 		if (c == '\n') {
 			continue;
 		}
@@ -187,6 +192,8 @@ void sbk_shell_receive(const struct sbk_shell *sh)
 			continue;
 		}
 	}
+
+	return (cnt == 0U) ? false : true;
 }
 
 void sbk_shell_set_bypass(const struct sbk_shell *sh,

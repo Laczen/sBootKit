@@ -26,12 +26,9 @@ extern "C" {
  *
  */
 
-enum sbk_slot_ioctl_cmd {
-	SBK_SLOT_IOCTL_INVALID = 0,
-	SBK_SLOT_IOCTL_GET_SIZE = 1,
-	SBK_SLOT_IOCTL_GET_ADDRESS = 2,
-	SBK_SLOT_IOCTL_GET_ERASE_BLOCK_SIZE = 3,
-	SBK_SLOT_IOCTL_GET_WRITE_BLOCK_SIZE = 4,
+enum sbk_slot_cmds {
+	SBK_SLOT_CMD_NONE = 0,
+	SBK_SLOT_CMD_GET_BACKUP_BLOCK_SIZE = 1,
 };
 
 /**
@@ -42,18 +39,24 @@ enum sbk_slot_ioctl_cmd {
 struct sbk_slot {
 	/* opaque context pointer */
 	void *ctx;
+	size_t size;
 
 	/* read data from slot (needs implementation) */
 	int (*read)(const void *ctx, uint32_t off, void *data, size_t len);
 
 	/* program data to slot (optional implementation), when calling the
 	 * prog routine on a backend that needs erase before programming the
-	 * routine should erase before programming. */
+	 * routine should erase before programming.
+	 */
 	int (*prog)(const void *ctx, uint32_t off, const void *data, size_t len);
 
-	/* get/set properties of the slot. */
-	int (*ioctl)(const void *ctx, enum sbk_slot_ioctl_cmd cmd, void *data,
-		     size_t len);
+	/* convert a slot offset to an address */
+	int (*address)(const void *ctx, uint32_t *address);
+
+	/* issue a command for a slot, this can be used in cases where a
+	 * slot specific get/set is required. */
+	int (*cmd)(const void *ctx, enum sbk_slot_cmds cmd, void *data,
+		   size_t len);
 
 	/* close a slot (optional implementation), any required synching of
 	 * buffers needs to be performed in this routine
@@ -83,12 +86,26 @@ int sbk_slot_prog(const struct sbk_slot *slot, uint32_t off, const void *data,
 		  size_t len);
 
 /**
- * @brief sbk_slot_ioctl
+ * @brief sbk_slot_size
  *
- * Get or set slot properties
+ * retrieve the size of a slot
  */
-int sbk_slot_ioctl(const struct sbk_slot *slot, enum sbk_slot_ioctl_cmd cmd,
-		   void *data, size_t len);
+int sbk_slot_size(const struct sbk_slot *slot, size_t *size);
+
+/**
+ * @brief sbk_slot_address
+ *
+ * translate the address in a slot to an absolute address
+ */
+int sbk_slot_address(const struct sbk_slot *slot, uint32_t *address);
+
+/**
+ * @brief sbk_slot_cmd
+ *
+ * issue a slot command
+ */
+int sbk_slot_cmd(const struct sbk_slot *slot, enum sbk_slot_cmds cmd,
+		 void *data, size_t len);
 
 /**
  * @brief sbk_slot_close

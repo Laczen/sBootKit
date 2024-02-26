@@ -12,6 +12,7 @@
 #define SBK_SHELL_H_
 
 #include <stddef.h>
+#include <stdbool.h>
 
 #ifndef CONFIG_SBK_SHELL_CMD_BUFSIZE
 #define CONFIG_SBK_SHELL_CMD_BUFSIZE 64
@@ -61,7 +62,7 @@ struct sbk_shell {
 	const size_t num_sbk_shell_cmds;
 };
 
-#define SBK_SHELL_DEFINE(_name, _commands, _num_commands)                       \
+#define SBK_SHELL_DEFINE(_name, _commands, _num_commands)			\
 	struct sbk_shell_data _name##_sbk_shell_data = {                        \
 		.bypass = NULL,                                                 \
 		.send = NULL,                                                   \
@@ -77,7 +78,9 @@ struct sbk_shell {
 	};                                                                      \
 	const struct sbk_shell *_name = &_name##_sbk_shell
 
-void sbk_shell_receive(const struct sbk_shell *sh);
+void sbk_shell_prompt(const struct sbk_shell *sh);
+
+bool sbk_shell_receive(const struct sbk_shell *sh);
 
 void sbk_shell_fprintf(const struct sbk_shell *sh, const char *fmt, ...);
 
@@ -96,4 +99,4 @@ extern int sbk_shell_init_transport(const struct sbk_shell *sh);
 }
 #endif /* __cplusplus */
 
-#endif /* SBK_MOVE_H_ */
+#endif /* SBK_SHELL_H_ */

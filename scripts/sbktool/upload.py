@@ -20,6 +20,8 @@ from intelhex import IntelHex
 import binascii
 import os.path
 import serial
+import serial.threaded
+import sys
 import time
 
 INTEL_HEX_EXT = "hex"
@@ -34,7 +36,7 @@ def upload(device, baudrate, slot, file):
         payload = ih.tobinarray()
         port = []
         try:
-                s = serial.Serial(device, baudrate)
+                s = serial.Serial(device, baudrate, timeout = 0.5)
                 s.close()
                 port.append(device)
         except (OSError, serial.SerialException):
@@ -44,23 +46,51 @@ def upload(device, baudrate, slot, file):
                 msg = device + " is not available"
                 raise ValueError(msg)
 
-        s = serial.Serial(port[0], baudrate, timeout = 2)
-                
-        msg = "image upload " + str(slot) + " " + str(len(payload)) + "\n"
-        s.write(msg.encode())
-        time.sleep(0.01)
+        s.open()
+        s.reset_input_buffer()
+        s.reset_output_buffer()
+
+        while True:
+                s.write(b'\r\n')
+                s.flush()
+                msg = s.read_until("sbk_shell>")
+                if msg is not None:
+                        break
+
+        msg = "upload " + str(slot) + " " + str(len(payload)) + "\r\n"
+        s.write(msg.encode('utf8'))
+        s.flush()
+        allow_send = False
+        while True:
+                msg = s.readline()
+                ok = msg.decode('utf8').find('OK')
+                if (ok > 0):
+                        allow_send = True
+                        break
+        
         pos = 0
         length = len(payload)
+        print("uploading " + str(length) + "byte of " + file)
         while True:
-                time.sleep(0.01)
-                a = s.read_until(b'OK\r\n')
-                print("rsp: " + a[:-1].decode(), end = '\r')
-                if length == 0:
-                        break
-                wrlen = min(length, 32)
-                data = payload[pos: pos + wrlen]
-                b = s.write(data)
-                length -= wrlen
-                pos += wrlen
+                if allow_send:
+                        wrlen = min(length - pos, 64)
+                        data = payload[pos: pos + wrlen]
+                        b = s.write(data)
+                        s.flush()
+                        pos += wrlen
+                        if (pos % 512 == 0) or (pos == length):
+                                allow_send = False
+                else:
+                        msg = s.readline()
+                        ok = msg.decode('utf8').find('OK')
+                        if (ok > 0):
+                                print(f'\r {pos/length * 100:.2f} %', end = '')
+                                if (pos < length):
+                                        allow_send = True
+                                else:
+                                        print(" ", end = '')
+                                        break
+                        
 
+        print("done")
         s.close()
